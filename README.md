@@ -27,7 +27,7 @@ DockNova est un outil d'audit de sécurité **non-intrusif** (read-only) conçu 
 ## Installation
 
 ```bash
-git clone https://github.com/votre-repo/DockNova.git
+git clone https://github.com/RunasRs/DockNova.git
 cd DockNova
 chmod +x docknova.sh
 ```
@@ -38,11 +38,8 @@ chmod +x docknova.sh
 # Audit simple
 ./docknova.sh
 
-# Avec Docker
-docker run --rm -v /var/run/docker.sock:/var/run/docker.sock docknova
-
-# Avec Podman
-podman run --rm -v /run/podman/podman.sock:/run/podman/podman.sock docknova
+# Avec WSL
+wsl -d kali-linux -- bash -c "git clone https://github.com/RunasRs/DockNova.git && bash DockNova/docknova.sh"
 ```
 
 ## Matrice de détection des vulnérabilités
