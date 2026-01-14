@@ -115,13 +115,12 @@ ${LBLUE}EXEMPLES:${NC}
     $(basename "$0") -c -t 80                 # Mode CI avec seuil 80%
 
 ${LBLUE}RÉFÉRENCES:${NC}
-    - CIS Docker Benchmark: https://www.cisecurity.org/benchmark/docker
     - ANSSI Docker: https://cyber.gouv.fr/publications/recommandations-de-securite-relatives-au-deploiement-de-conteneurs-docker
     - OWASP: https://cheatsheetseries.owasp.org/cheatsheets/Docker_Security_Cheat_Sheet.html
+    - Docker Security Best Practices: https://docs.docker.com/engine/security/
 
 ${LBLUE}NOTE:${NC}
-    - Aucune dépendance externe requise (pas de jq, pas de parallel)
-    - Utilise uniquement Bash et Docker/Podman standards
+    - Utilise uniquement Bash et Docker/Podman
 
 EOF
 }
@@ -731,26 +730,26 @@ check_security() {
     
     local resource_unlimited=false
     if [[ "$mem_limit" == "0" ]]; then
-        echo -e "  ${LRED}[!]${NC} ${LRED}RAM illimitée - Risque de déni de service (DoS)${NC}"
-        echo -e "      ${DGRAY}├─${NC} ${LRED}Exploitation : Memory exhaustion attack${NC}"
+        echo -e "  ${YELLOW}[!]${NC} ${YELLOW}RAM illimitée - Risque de déni de service (DoS)${NC}"
+        echo -e "      ${DGRAY}├─${NC} ${YELLOW}Exploitation : Memory exhaustion attack${NC}"
         echo -e "      ${DGRAY}└─${NC} ${LYELLOW}Correction : docker run --memory=<limit> (ex: --memory=2g)${NC}"
         ((warnings++))
         resource_unlimited=true
     fi
     
     if [[ "$cpu_quota" == "-1" ]] || [[ "$cpu_quota" == "0" ]]; then
-        echo -e "  ${LRED}[!]${NC} ${LRED}CPU illimité - Risque de monopolisation CPU${NC}"
-        echo -e "      ${DGRAY}├─${NC} ${LRED}Exploitation : CPU exhaustion attack${NC}"
+        echo -e "  ${YELLOW}[!]${NC} ${YELLOW}CPU illimité - Risque de monopolisation CPU${NC}"
+        echo -e "      ${DGRAY}├─${NC} ${YELLOW}Exploitation : CPU exhaustion attack${NC}"
         echo -e "      ${DGRAY}└─${NC} ${LYELLOW}Correction : docker run --cpus=<limit> (ex: --cpus=2)${NC}"
         ((warnings++))
         resource_unlimited=true
     fi
     
-    # 21. Tag :latest (ANSSI/OWASP - CRITIQUE pour reproductibilité)
+    # 21. Tag :latest (ANSSI/OWASP - HAUTE pour reproductibilité et traçabilité)
     local image_full=$(get_container_field "$cid" '{{.Config.Image}}')
     if echo "$image_full" | grep -qE ':latest$|^[^:]+$'; then
-        echo -e "  ${LRED}[!]${NC} ${LRED}Image avec tag :latest ou sans tag${NC}"
-        echo -e "      ${DGRAY}├─${NC} ${LRED}Risque : Déploiements non-déterministes, versions non traçables${NC}"
+        echo -e "  ${YELLOW}[!]${NC} ${YELLOW}Image avec tag :latest ou sans tag${NC}"
+        echo -e "      ${DGRAY}├─${NC} ${YELLOW}Risque : Déploiements non-déterministes, versions non traçables${NC}"
         echo -e "      ${DGRAY}├─${NC} Image : ${LYELLOW}$image_full${NC}"
         echo -e "      ${DGRAY}└─${NC} ${LYELLOW}Correction : Utiliser des tags versionnés (ex: nginx:1.21.6)${NC}"
         ((warnings++))
@@ -759,8 +758,8 @@ check_security() {
     # 22. PIDs limit (CIS - HAUTE pour prévenir fork bomb)
     local pids_limit=$(get_container_field "$cid" '{{.HostConfig.PidsLimit}}')
     if [[ "$pids_limit" == "0" ]] || [[ "$pids_limit" == "-1" ]] || [[ -z "$pids_limit" ]]; then
-        echo -e "  ${LRED}[!]${NC} ${LRED}PIDs limit non défini - Risque de fork bomb${NC}"
-        echo -e "      ${DGRAY}├─${NC} ${LRED}Exploitation : :(){ :|:& };: (fork bomb)${NC}"
+        echo -e "  ${YELLOW}[!]${NC} ${YELLOW}PIDs limit non défini - Risque de fork bomb${NC}"
+        echo -e "      ${DGRAY}├─${NC} ${YELLOW}Exploitation : :(){ :|:& };: (fork bomb)${NC}"
         echo -e "      ${DGRAY}└─${NC} ${LYELLOW}Correction : docker run --pids-limit=100${NC}"
         ((warnings++))
     fi
@@ -783,11 +782,11 @@ check_security() {
         ((warnings++))
     fi
     
-    # 25. Logging driver (ANSSI/CIS - MOYENNE pour traçabilité)
+    # 25. Logging driver (ANSSI/CIS - HAUTE pour traçabilité)
     local log_driver=$(get_container_field "$cid" '{{.HostConfig.LogConfig.Type}}')
     if [[ "$log_driver" == "none" ]]; then
-        echo -e "  ${LRED}[!]${NC} ${LRED}Logging désactivé (driver: none)${NC}"
-        echo -e "      ${DGRAY}├─${NC} ${LRED}Aucune traçabilité des événements${NC}"
+        echo -e "  ${YELLOW}[!]${NC} ${YELLOW}Logging désactivé (driver: none)${NC}"
+        echo -e "      ${DGRAY}├─${NC} ${YELLOW}Aucune traçabilité des événements${NC}"
         echo -e "      ${DGRAY}└─${NC} ${LYELLOW}Correction : Utiliser json-file, syslog, ou journald${NC}"
         ((warnings++))
     elif [[ "$log_driver" == "json-file" ]]; then
