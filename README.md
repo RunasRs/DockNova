@@ -85,7 +85,7 @@ wsl -d kali-linux -- bash -c "git clone https://github.com/RunasRs/DockNova.git 
 |--------|-------------|--------|
 | 🔴 **CRITIQUE** | Faille permettant échappement conteneur ou compromission système | Correction **IMMÉDIATE** requise |
 | 🟠 **HAUTE** | Risque significatif de compromission ou DoS | Correction **PRIORITAIRE** |
-| 🟡 **MOYENNE** | Impact opérationnel ou risque modéré | Correction **RECOMMANDÉE** |
+| 🟡 **MOYENNE**| Impact opérationnel ou risque modéré | Correction **RECOMMANDÉE** |
 
 
 
