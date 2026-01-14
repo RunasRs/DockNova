@@ -114,10 +114,10 @@ ${LBLUE}EXEMPLES:${NC}
 ${LBLUE}RÉFÉRENCES:${NC}
     - ANSSI Docker: https://cyber.gouv.fr/publications/recommandations-de-securite-relatives-au-deploiement-de-conteneurs-docker
     - OWASP: https://cheatsheetseries.owasp.org/cheatsheets/Docker_Security_Cheat_Sheet.html
+    - Docker Security Best Practices: https://docs.docker.com/engine/security/
 
 ${LBLUE}NOTE:${NC}
-
-    - Utilise uniquement Bash et Docker/Podman standards
+    - Utilise uniquement Bash et Docker/Podman
 
 EOF
 }
@@ -886,16 +886,16 @@ check_security() {
     
     local resource_unlimited=false
     if [[ "$mem_limit" == "0" ]]; then
-        echo -e "  ${LRED}[x]${NC} ${LRED}RAM illimitée - Risque de déni de service (DoS)${NC}"
-        echo -e "      ${DGRAY}├─${NC} ${LRED}Exploitation : Memory exhaustion attack${NC}"
+        echo -e "  ${YELLOW}[!]${NC} ${YELLOW}RAM illimitée - Risque de déni de service (DoS)${NC}"
+        echo -e "      ${DGRAY}├─${NC} ${YELLOW}Exploitation : Memory exhaustion attack${NC}"
         echo -e "      ${DGRAY}└─${NC} ${LYELLOW}Correction : docker run --memory=<limit> (ex: --memory=2g)${NC}"
         ((warnings++))
         resource_unlimited=true
     fi
     
     if [[ "$cpu_quota" == "-1" ]] || [[ "$cpu_quota" == "0" ]]; then
-        echo -e "  ${LRED}[x]${NC} ${LRED}CPU illimité - Risque de monopolisation CPU${NC}"
-        echo -e "      ${DGRAY}├─${NC} ${LRED}Exploitation : CPU exhaustion attack${NC}"
+        echo -e "  ${YELLOW}[!]${NC} ${YELLOW}CPU illimité - Risque de monopolisation CPU${NC}"
+        echo -e "      ${DGRAY}├─${NC} ${YELLOW}Exploitation : CPU exhaustion attack${NC}"
         echo -e "      ${DGRAY}└─${NC} ${LYELLOW}Correction : docker run --cpus=<limit> (ex: --cpus=2)${NC}"
         ((warnings++))
         resource_unlimited=true
@@ -914,8 +914,8 @@ check_security() {
     # 22. PIDs limit (CIS - HAUTE pour prévenir fork bomb)
     local pids_limit=$(get_container_field "$cid" '{{.HostConfig.PidsLimit}}')
     if [[ "$pids_limit" == "0" ]] || [[ "$pids_limit" == "-1" ]] || [[ -z "$pids_limit" ]]; then
-        echo -e "  ${LRED}[x]${NC} ${LRED}PIDs limit non défini - Risque de fork bomb${NC}"
-        echo -e "      ${DGRAY}├─${NC} ${LRED}Exploitation : :(){ :|:& };: (fork bomb)${NC}"
+        echo -e "  ${YELLOW}[!]${NC} ${YELLOW}PIDs limit non défini - Risque de fork bomb${NC}"
+        echo -e "      ${DGRAY}├─${NC} ${YELLOW}Exploitation : :(){ :|:& };: (fork bomb)${NC}"
         echo -e "      ${DGRAY}└─${NC} ${LYELLOW}Correction : docker run --pids-limit=100${NC}"
         ((warnings++))
     fi
@@ -939,10 +939,10 @@ check_security() {
         ((warnings++))
     fi
     
-    # 25. Logging driver (ANSSI/CIS - MOYENNE pour traçabilité)
+    # 25. Logging driver (ANSSI/CIS - HAUTE pour traçabilité)
     local log_driver=$(get_container_field "$cid" '{{.HostConfig.LogConfig.Type}}')
     if [[ "$log_driver" == "none" ]]; then
-        echo -e "  ${LRED}[x]${NC} ${LRED}Logging désactivé (driver: none)${NC}"
+        echo -e "  ${YELLOW}[!]${NC} ${YELLOW}Logging désactivé (driver: none)${NC}"
         echo -e "      ${DGRAY}├─${NC} ${LRED}Aucune traçabilité des événements${NC}"
         echo -e "      ${DGRAY}└─${NC} ${LYELLOW}Correction : Utiliser json-file, syslog, ou journald${NC}"
         ((warnings++))
@@ -1617,12 +1617,12 @@ main() {
             [[ $containers_with_cgroup_access -gt 0 ]] && echo -e "  ${LRED}[x]${NC} ${LRED}$containers_with_cgroup_access${NC} conteneur(s) avec config risque cgroups ${LRED}[CONTAINER ESCAPE]${NC}"
             [[ $containers_with_cloud_creds -gt 0 ]] && echo -e "  ${LRED}[x]${NC} ${LRED}$containers_with_cloud_creds${NC} conteneur(s) avec credentials cloud détectés ${LRED}[AWS/GCP/Azure]${NC}"
             [[ $containers_with_seccomp_disabled -gt 0 ]] && echo -e "  ${LRED}[x]${NC} ${LRED}$containers_with_seccomp_disabled${NC} conteneur(s) avec Seccomp DÉSACTIVÉ ${LRED}[ALL SYSCALLS]${NC}"
-            [[ $containers_with_unlimited_resources -gt 0 ]] && echo -e "  ${LRED}[x]${NC} ${LRED}$containers_with_unlimited_resources${NC} conteneur(s) avec ressources ILLIMITÉES ${LRED}[DoS RISK]${NC}"
-            [[ $containers_with_latest_tag -gt 0 ]] && echo -e "  ${LRED}[x]${NC} ${LRED}$containers_with_latest_tag${NC} conteneur(s) avec tag :latest ${LRED}[NON-DETERMINISTIC]${NC}"
-            [[ $containers_without_pids_limit -gt 0 ]] && echo -e "  ${LRED}[x]${NC} ${LRED}$containers_without_pids_limit${NC} conteneur(s) sans PIDs limit ${LRED}[FORK BOMB]${NC}"
+            [[ $containers_with_unlimited_resources -gt 0 ]] && echo -e "  ${YELLOW}[!]${NC} ${YELLOW}$containers_with_unlimited_resources${NC} conteneur(s) avec ressources ILLIMITÉES ${YELLOW}[DoS RISK]${NC}"
+            [[ $containers_with_latest_tag -gt 0 ]] && echo -e "  ${YELLOW}[!]${NC} ${YELLOW}$containers_with_latest_tag${NC} conteneur(s) avec tag :latest ${YELLOW}[NON-DETERMINISTIC]${NC}"
+            [[ $containers_without_pids_limit -gt 0 ]] && echo -e "  ${YELLOW}[!]${NC} ${YELLOW}$containers_without_pids_limit${NC} conteneur(s) sans PIDs limit ${YELLOW}[FORK BOMB]${NC}"
             [[ $containers_without_ulimits -gt 0 ]] && echo -e "  ${YELLOW}[!]${NC} ${YELLOW}$containers_without_ulimits${NC} conteneur(s) sans ulimits configurés"
             [[ $containers_without_healthcheck -gt 0 ]] && echo -e "  ${YELLOW}[!]${NC} ${YELLOW}$containers_without_healthcheck${NC} conteneur(s) sans healthcheck"
-            [[ $containers_with_no_logging -gt 0 ]] && echo -e "  ${LRED}[x]${NC} ${LRED}$containers_with_no_logging${NC} conteneur(s) avec logging DÉSACTIVÉ ${LRED}[NO AUDIT]${NC}"
+            [[ $containers_with_no_logging -gt 0 ]] && echo -e "  ${YELLOW}[!]${NC} ${YELLOW}$containers_with_no_logging${NC} conteneur(s) avec logging DÉSACTIVÉ ${YELLOW}[NO AUDIT]${NC}"
             
             echo
             echo -e "  ${LRED}Total : $total_security_issues alerte(s) de sécurité${NC}"
@@ -1672,15 +1672,15 @@ main() {
             fi
             
             if [[ $containers_without_pids_limit -gt 0 ]]; then
-                echo -e "  ${LRED}[CRITIQUE]${NC} PIDs limit non défini (fork bomb) :"
+                echo -e "  ${YELLOW}[HAUTE]${NC} PIDs limit non défini (fork bomb) :"
                 echo -e "      ${DGRAY}├─${NC} ${LRED}Risque de fork bomb paralysant le système${NC}"
                 echo -e "      ${DGRAY}└─${NC} ${LYELLOW}docker run --pids-limit=100${NC}"
                 echo
             fi
             
             if [[ $containers_with_no_logging -gt 0 ]]; then
-                echo -e "  ${LRED}[CRITIQUE]${NC} Logging désactivé :"
-                echo -e "      ${DGRAY}├─${NC} ${LRED}Aucune traçabilité en cas d'incident${NC}"
+                echo -e "  ${YELLOW}[HAUTE]${NC} Logging désactivé :"
+                echo -e "      ${DGRAY}├─${NC} ${YELLOW}Aucune traçabilité en cas d'incident${NC}"
                 echo -e "      ${DGRAY}├─${NC} ${LYELLOW}docker run --log-driver=json-file${NC}"
                 echo -e "      ${DGRAY}└─${NC} ${LYELLOW}docker run --log-opt max-size=10m --log-opt max-file=3${NC}"
                 echo
