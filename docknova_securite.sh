@@ -22,8 +22,8 @@ RED='\033[0;31m'
 LRED='\033[1;31m'
 GREEN='\033[0;32m'
 LGREEN='\033[1;32m'
-YELLOW='\033[0;33m'
 LYELLOW='\033[1;33m'
+ORANGE='\033[38;5;208m'
 BLUE='\033[0;34m'
 LBLUE='\033[1;34m'
 CYAN='\033[0;36m'
@@ -38,7 +38,6 @@ readonly VERSION="2.0"
 readonly SCRIPT_NAME="DockNova Sécurité"
 
 # Options de ligne de commande
-VERBOSE=false
 NO_COLOR=false     # Désactiver les couleurs
 
 # Pas de cache - utilisation directe de docker inspect --format (pas de dépendance)
@@ -74,10 +73,6 @@ declare -A SECURITY_STATS=(
 # =============================================================================
 
 # Logging amélioré
-log_debug() {
-    [[ "$VERBOSE" == "true" ]] && echo -e "${DGRAY}[DEBUG]${NC} $*" >&2
-}
-
 log_info() {
     echo -e "${LBLUE}[INFO]${NC} $*"
 }
@@ -96,30 +91,25 @@ log_success() {
 
 # Affichage de l'aide
 show_help() {
-    cat << EOF
-${LGREEN}${SCRIPT_NAME}${NC} v${VERSION} - Audit de Sécurité Docker Professionnel
-
-${LBLUE}USAGE:${NC}
-    $(basename "$0") [OPTIONS]
-
-${LBLUE}OPTIONS:${NC}
-    -h, --help              Afficher cette aide
-    -v, --verbose           Mode verbeux avec debug
-    --no-color              Désactiver les couleurs
-
-${LBLUE}EXEMPLES:${NC}
-    $(basename "$0")                          # Audit standard
-    $(basename "$0") -v                       # Mode verbeux
-
-${LBLUE}RÉFÉRENCES:${NC}
-    - ANSSI Docker: https://cyber.gouv.fr/publications/recommandations-de-securite-relatives-au-deploiement-de-conteneurs-docker
-    - OWASP: https://cheatsheetseries.owasp.org/cheatsheets/Docker_Security_Cheat_Sheet.html
-    - Docker Security Best Practices: https://docs.docker.com/engine/security/
-
-${LBLUE}NOTE:${NC}
-    - Utilise uniquement Bash et Docker/Podman
-
-EOF
+    echo -e "${LGREEN}${SCRIPT_NAME}${NC} v${VERSION} - Audit de Sécurité Docker Professionnel"
+    echo ""
+    echo -e "${LBLUE}USAGE:${NC}"
+    echo -e "    $(basename "$0") [OPTIONS]"
+    echo ""
+    echo -e "${LBLUE}OPTIONS:${NC}"
+    echo -e "    -h, --help              Afficher cette aide"
+    echo -e "    --no-color              Désactiver les couleurs"
+    echo ""
+    echo -e "${LBLUE}EXEMPLES:${NC}"
+    echo -e "    $(basename "$0")                          # Audit standard"
+    echo ""
+    echo -e "${LBLUE}RÉFÉRENCES:${NC}"
+    echo -e "    - ANSSI Docker: https://cyber.gouv.fr/publications/recommandations-de-securite-relatives-au-deploiement-de-conteneurs-docker"
+    echo -e "    - OWASP: https://cheatsheetseries.owasp.org/cheatsheets/Docker_Security_Cheat_Sheet.html"
+    echo -e "    - Docker Security Best Practices: https://docs.docker.com/engine/security/"
+    echo ""
+    echo -e "${LBLUE}NOTE:${NC}"
+    echo -e "    - Utilise uniquement Bash et Docker/Podman"
 }
 
 # =============================================================================
@@ -132,13 +122,11 @@ DOCKER_CMD=""
 detect_container_engine() {
     if command -v docker &> /dev/null && docker info &> /dev/null 2>&1; then
         DOCKER_CMD="docker"
-        log_debug "Docker détecté et accessible"
         return 0
     fi
     
     if command -v podman &> /dev/null && podman info &> /dev/null 2>&1; then
         DOCKER_CMD="podman"
-        log_debug "Podman détecté et accessible"
         return 0
     fi
     
@@ -254,6 +242,7 @@ detect_sensitive_data() {
 check_security() {
     local cid="$1"
     local name="$2"
+    local is_running="${3:-false}"
     local warnings=0
     
     # Récupération des informations de sécurité
@@ -303,8 +292,8 @@ check_security() {
             dangerous_caps_found=true
         fi
         if echo "$cap_add" | grep -qiE "SYS_PTRACE"; then
-            echo -e "  ${LRED}[x]${NC} ${LRED}Capability SYS_PTRACE ajoutée${NC}"
-            echo -e "      ${DGRAY}├─${NC} ${LRED}Exploitation : Injection de code dans les processus de l'hôte${NC}"
+            echo -e "  ${LYELLOW}[!]${NC} ${LYELLOW}Capability SYS_PTRACE ajoutée${NC}"
+            echo -e "      ${DGRAY}├─${NC} ${LYELLOW}Exploitation : Injection de code dans les processus de l'hôte${NC}"
             echo -e "      ${DGRAY}└─${NC} ${LYELLOW}Permet d'utiliser ptrace() pour attacher et modifier des processus${NC}"
             ((warnings++))
             dangerous_caps_found=true
@@ -324,21 +313,21 @@ check_security() {
             dangerous_caps_found=true
         fi
         if echo "$cap_add" | grep -qiE "DAC_OVERRIDE|DAC_READ_SEARCH"; then
-            echo -e "  ${YELLOW}[!]${NC} ${YELLOW}Capability DAC_OVERRIDE/DAC_READ_SEARCH ajoutée${NC}"
+            echo -e "  ${LYELLOW}[!]${NC} ${LYELLOW}Capability DAC_OVERRIDE/DAC_READ_SEARCH ajoutée${NC}"
             echo -e "      ${DGRAY}├─${NC} Exploitation : Bypass des permissions de fichiers"
             echo -e "      ${DGRAY}└─${NC} Permet de lire/écrire des fichiers sans vérification des permissions"
             ((warnings++))
             dangerous_caps_found=true
         fi
         if echo "$cap_add" | grep -qiE "NET_ADMIN"; then
-            echo -e "  ${YELLOW}[!]${NC} ${YELLOW}Capability NET_ADMIN ajoutée${NC}"
+            echo -e "  ${LYELLOW}[!]${NC} ${LYELLOW}Capability NET_ADMIN ajoutée${NC}"
             echo -e "      ${DGRAY}├─${NC} Exploitation : Configuration réseau, sniffing, spoofing"
             echo -e "      ${DGRAY}└─${NC} ${LYELLOW}Permet de créer des interfaces réseau, modifier les routes, iptables${NC}"
             ((warnings++))
             dangerous_caps_found=true
         fi
         if echo "$cap_add" | grep -qiE "NET_RAW"; then
-            echo -e "  ${YELLOW}[!]${NC} ${YELLOW}Capability NET_RAW ajoutée${NC}"
+            echo -e "  ${LYELLOW}[!]${NC} ${LYELLOW}Capability NET_RAW ajoutée${NC}"
             echo -e "      ${DGRAY}├─${NC} Exploitation : Création de paquets réseau raw (ARP spoofing, MitM)"
             echo -e "      ${DGRAY}└─${NC} Permet d'utiliser des raw sockets pour le sniffing et le spoofing"
             ((warnings++))
@@ -352,21 +341,21 @@ check_security() {
             dangerous_caps_found=true
         fi
         if echo "$cap_add" | grep -qiE "SYS_TIME"; then
-            echo -e "  ${YELLOW}[!]${NC} Capability SYS_TIME ajoutée"
+            echo -e "  ${LYELLOW}[!]${NC} ${LYELLOW}Capability SYS_TIME ajoutée${NC}"
             echo -e "      ${DGRAY}├─${NC} Exploitation : Modification de l'horloge système"
             echo -e "      ${DGRAY}└─${NC} Peut affecter les certificats, logs, et synchronisation"
             ((warnings++))
             dangerous_caps_found=true
         fi
         if echo "$cap_add" | grep -qiE "SYS_CHROOT"; then
-            echo -e "  ${YELLOW}[!]${NC} Capability SYS_CHROOT ajoutée"
+            echo -e "  ${LYELLOW}[!]${NC} ${LYELLOW}Capability SYS_CHROOT ajoutée${NC}"
             echo -e "      ${DGRAY}├─${NC} Exploitation : Échappement via chroot"
             echo -e "      ${DGRAY}└─${NC} Combiné avec d'autres caps, peut faciliter l'échappement"
             ((warnings++))
             dangerous_caps_found=true
         fi
         if echo "$cap_add" | grep -qiE "MKNOD"; then
-            echo -e "  ${YELLOW}[!]${NC} Capability MKNOD ajoutée"
+            echo -e "  ${LYELLOW}[!]${NC} ${LYELLOW}Capability MKNOD ajoutée${NC}"
             echo -e "      ${DGRAY}├─${NC} Exploitation : Création de périphériques bloc/caractères"
             echo -e "      ${DGRAY}└─${NC} ${LYELLOW}Commande exploit : mknod /tmp/sda b 8 0${NC}"
             ((warnings++))
@@ -374,7 +363,7 @@ check_security() {
         fi
         
         if [[ "$dangerous_caps_found" == "false" ]]; then
-            echo -e "  ${YELLOW}[!]${NC} Capabilities ajoutées : $cap_add"
+            echo -e "  ${LYELLOW}[!]${NC} ${LYELLOW}Capabilities ajoutées : $cap_add${NC}"
             ((warnings++))
         fi
     fi
@@ -393,20 +382,37 @@ check_security() {
     if echo "$volumes" | grep -q "/var/run/docker.sock"; then
         socket_mode=$(get_container_field "$cid" '{{range .Mounts}}{{if eq .Destination "/var/run/docker.sock"}}{{.RW}}{{end}}{{end}}')
         
-        local socket_perms=$($DOCKER_CMD exec "$cid" sh -c "ls -l /var/run/docker.sock 2>/dev/null | awk '{print \$1}'" 2>/dev/null)
-        local socket_group=$($DOCKER_CMD exec "$cid" sh -c "ls -l /var/run/docker.sock 2>/dev/null | awk '{print \$4}'" 2>/dev/null)
+        local socket_perms=""
+        local socket_group=""
+        if [[ "$is_running" == "true" ]]; then
+            socket_perms=$($DOCKER_CMD exec "$cid" sh -c "ls -l /var/run/docker.sock 2>/dev/null | awk '{print \$1}'" 2>/dev/null)
+            socket_group=$($DOCKER_CMD exec "$cid" sh -c "ls -l /var/run/docker.sock 2>/dev/null | awk '{print \$4}'" 2>/dev/null)
+        fi
         
-        if [[ "$socket_mode" == "true" ]] || echo "$socket_perms" | grep -q "rw"; then
-            echo -e "  ${LRED}[x]${NC} ${LRED}Socket Docker monté (risque accès ÉCRITURE)${NC}"
+        # IMPORTANT : Le mode RO n'est PAS une protection réelle contre l'API Docker
+        # Les permissions Unix ro ne bloquent pas les requêtes HTTP (POST/DELETE/PUT) sur un socket Unix
+        # Monter le socket Docker = accès à l'API Docker = contrôle équivalent à root Docker
+        if [[ "$socket_mode" == "true" ]]; then
+            echo -e "  ${LRED}[x]${NC} ${LRED}Socket Docker monté (mode read-write)${NC}"
             echo -e "      ${DGRAY}├─${NC} ${LRED}CRITIQUE : Escalade de privilèges & échapement de conteneur possible${NC}"
             echo -e "      ${DGRAY}├─${NC} Le conteneur peut créer/modifier/supprimer des conteneurs sur l'hôte"
             [[ -n "$socket_perms" ]] && echo -e "      ${DGRAY}├─${NC} Permissions : ${LBLUE}$socket_perms${NC}"
             [[ -n "$socket_group" ]] && echo -e "      ${DGRAY}├─${NC} Groupe : ${LBLUE}$socket_group${NC}"
-            echo -e "      ${DGRAY}└─${NC} Mode montage : ${LYELLOW}RW=$socket_mode${NC}"
+            echo -e "      ${DGRAY}└─${NC} Mode montage : ${LRED}RW (read-write)${NC}"
+            ((warnings++))
+        elif [[ "$socket_mode" == "false" ]]; then
+            echo -e "  ${LRED}[x]${NC} ${LRED}Socket Docker monté (mode read-only déclaré)${NC}"
+            echo -e "      ${DGRAY}├─${NC} ${LRED}CRITIQUE : Escalade de privilèges & échapement de conteneur possible${NC}"
+            echo -e "      ${DGRAY}├─${NC} Les permissions Unix ro ne bloquent pas les requêtes HTTP (POST/DELETE/PUT)"
+            echo -e "      ${DGRAY}├─${NC} Le conteneur peut toujours utiliser l'API REST Docker (équivalent root Docker)"
+            [[ -n "$socket_perms" ]] && echo -e "      ${DGRAY}├─${NC} Permissions : ${LBLUE}$socket_perms${NC}"
+            echo -e "      ${DGRAY}└─${NC} Mode montage déclaré : ${LYELLOW}RO (non protecteur)${NC}"
             ((warnings++))
         else
-            echo -e "  ${YELLOW}[!]${NC} ${YELLOW}Socket Docker monté (configuration read-only)${NC}"
-            echo -e "      ${DGRAY}├─${NC} Accès limité mais peut lire les informations Docker"
+            # Cas où socket_mode n'est pas défini ou a une valeur inattendue
+            echo -e "  ${LRED}[x]${NC} ${LRED}Socket Docker monté${NC}"
+            echo -e "      ${DGRAY}├─${NC} ${LRED}CRITIQUE : Accès à l'API Docker = contrôle équivalent à root Docker${NC}"
+            echo -e "      ${DGRAY}├─${NC} Mode montage : ${LBLUE}$socket_mode${NC}"
             [[ -n "$socket_perms" ]] && echo -e "      ${DGRAY}└─${NC} Permissions : ${LBLUE}$socket_perms${NC}"
             ((warnings++))
         fi
@@ -428,23 +434,41 @@ check_security() {
     if [[ -n "$podman_socket_dest" ]]; then
         socket_mode=$(get_container_field "$cid" "{{range .Mounts}}{{if eq .Destination \"$podman_socket_dest\"}}{{.RW}}{{end}}{{end}}")
         
-        local socket_perms=$($DOCKER_CMD exec "$cid" sh -c "ls -l \"$podman_socket_dest\" 2>/dev/null | awk '{print \$1}'" 2>/dev/null)
+        local socket_perms=""
+        if [[ "$is_running" == "true" ]]; then
+            socket_perms=$($DOCKER_CMD exec "$cid" sh -c "ls -l \"$podman_socket_dest\" 2>/dev/null | awk '{print \$1}'" 2>/dev/null)
+        fi
         local socket_path_display="$podman_socket_dest"
         # Afficher le pattern générique pour rootless
         if [[ "$podman_socket_dest" =~ /run/user/[0-9]+/podman/podman.sock ]]; then
             socket_path_display="/run/user/\$(id -u)/podman/podman.sock (rootless)"
         fi
         
-        if [[ "$socket_mode" == "true" ]] || echo "$socket_perms" | grep -q "rw"; then
-            echo -e "  ${LRED}[x]${NC} ${LRED}Socket Podman monté (risque accès ÉCRITURE)${NC}"
+        # IMPORTANT : Le mode RO n'est PAS une protection réelle contre l'API Podman
+        # Les permissions Unix ro ne bloquent pas les requêtes HTTP (POST/DELETE/PUT) sur un socket Unix
+        # Monter le socket Podman = accès à l'API Podman = contrôle équivalent à root Podman
+        if [[ "$socket_mode" == "true" ]]; then
+            echo -e "  ${LRED}[x]${NC} ${LRED}Socket Podman monté (mode read-write)${NC}"
             echo -e "      ${DGRAY}├─${NC} ${LRED}CRITIQUE : Contrôle total du moteur Podman${NC}"
             echo -e "      ${DGRAY}├─${NC} Chemin : ${LBLUE}$socket_path_display${NC}"
             [[ -n "$socket_perms" ]] && echo -e "      ${DGRAY}├─${NC} Permissions : ${LBLUE}$socket_perms${NC}"
-            echo -e "      ${DGRAY}└─${NC} Mode montage : ${LYELLOW}RW=$socket_mode${NC}"
+            echo -e "      ${DGRAY}└─${NC} Mode montage : ${LRED}RW (read-write)${NC}"
+            ((warnings++))
+        elif [[ "$socket_mode" == "false" ]]; then
+            echo -e "  ${LRED}[x]${NC} ${LRED}Socket Podman monté (mode read-only déclaré)${NC}"
+            echo -e "      ${DGRAY}├─${NC} ${LRED}CRITIQUE : Le mode RO ne protège PAS contre l'API Podman${NC}"
+            echo -e "      ${DGRAY}├─${NC} Les permissions Unix ro ne bloquent pas les requêtes HTTP (POST/DELETE/PUT)"
+            echo -e "      ${DGRAY}├─${NC} Le conteneur peut toujours utiliser l'API REST Podman (équivalent root Podman)"
+            echo -e "      ${DGRAY}├─${NC} Chemin : ${LBLUE}$socket_path_display${NC}"
+            [[ -n "$socket_perms" ]] && echo -e "      ${DGRAY}├─${NC} Permissions : ${LBLUE}$socket_perms${NC}"
+            echo -e "      ${DGRAY}└─${NC} Mode montage déclaré : ${LYELLOW}RO (non protecteur)${NC}"
             ((warnings++))
         else
-            echo -e "  ${YELLOW}[!]${NC} Socket Podman monté (configuration read-only)"
+            # Cas où socket_mode n'est pas défini ou a une valeur inattendue
+            echo -e "  ${LRED}[x]${NC} ${LRED}Socket Podman monté${NC}"
+            echo -e "      ${DGRAY}├─${NC} ${LRED}CRITIQUE : Accès à l'API Podman = contrôle équivalent à root Podman${NC}"
             echo -e "      ${DGRAY}├─${NC} Chemin : ${LBLUE}$socket_path_display${NC}"
+            echo -e "      ${DGRAY}├─${NC} Mode montage : ${LBLUE}$socket_mode${NC}"
             [[ -n "$socket_perms" ]] && echo -e "      ${DGRAY}└─${NC} Permissions : ${LBLUE}$socket_perms${NC}"
             ((warnings++))
         fi
@@ -478,7 +502,7 @@ check_security() {
                 echo -e "      ${DGRAY}├─${NC} Le socket est présent (bind mount non détecté ou copié)"
                 [[ -n "$socket_perms" ]] && echo -e "      ${DGRAY}└─${NC} Permissions : ${LBLUE}$socket_perms${NC}"
             else
-                echo -e "  ${YELLOW}[!]${NC} Socket Docker accessible DANS le conteneur"
+                echo -e "  ${LYELLOW}[!]${NC} Socket Docker accessible DANS le conteneur"
                 echo -e "      ${DGRAY}├─${NC} Le socket est présent (bind mount non détecté ou copié)"
                 [[ -n "$socket_perms" ]] && echo -e "      ${DGRAY}└─${NC} Permissions : ${LBLUE}$socket_perms${NC}"
             fi
@@ -490,7 +514,7 @@ check_security() {
     # 4.6. Vérifier si Docker CLI est installé dans le conteneur
     if $DOCKER_CMD exec "$cid" sh -c "command -v docker" &>/dev/null; then
         local docker_version=$($DOCKER_CMD exec "$cid" sh -c "docker --version 2>/dev/null" || echo "Version inconnue")
-        echo -e "  ${YELLOW}[!]${NC} Docker CLI installé dans le conteneur"
+        echo -e "  ${LYELLOW}[!]${NC} Docker CLI installé dans le conteneur"
         echo -e "      ${DGRAY}├─${NC} Version : ${LBLUE}$docker_version${NC}"
         if [[ "$docker_socket_found" == "true" ]]; then
             echo -e "      ${DGRAY}└─${NC} ${LRED}RISQUE CRITIQUE : Docker CLI + Socket = Contrôle total de l'hôte${NC}"
@@ -502,7 +526,7 @@ check_security() {
     # 4.7. Vérifier si Podman CLI est installé
     if $DOCKER_CMD exec "$cid" sh -c "command -v podman" &>/dev/null; then
         local podman_version=$($DOCKER_CMD exec "$cid" sh -c "podman --version 2>/dev/null" || echo "Version inconnue")
-        echo -e "  ${YELLOW}[!]${NC} Podman CLI installé dans le conteneur"
+        echo -e "  ${LYELLOW}[!]${NC} Podman CLI installé dans le conteneur"
         echo -e "      ${DGRAY}└─${NC} Version : ${LBLUE}$podman_version${NC}"
     fi
     
@@ -512,19 +536,19 @@ check_security() {
     
     # 5. Namespace PID
     if [[ "$pid_mode" == "host" ]]; then
-        echo -e "  ${LRED}[x]${NC} Namespace PID partagé avec l'hôte (--pid=host)"
+        echo -e "  ${LYELLOW}[!]${NC} ${LYELLOW}Namespace PID partagé avec l'hôte (--pid=host)${NC}"
         ((warnings++))
     fi
     
     # 6. Namespace IPC
     if [[ "$ipc_mode" == "host" ]]; then
-        echo -e "  ${YELLOW}[!]${NC} Namespace IPC partagé avec l'hôte (--ipc=host)"
+        echo -e "  ${LYELLOW}[!]${NC} Namespace IPC partagé avec l'hôte (--ipc=host)"
         ((warnings++))
     fi
     
     # 7. Mode réseau
     if [[ "$network_mode" == "host" ]]; then
-        echo -e "  ${LRED}[x]${NC} Mode réseau host (--network=host)"
+        echo -e "  ${LYELLOW}[!]${NC} ${LYELLOW}Mode réseau host (--network=host)${NC}"
         ((warnings++))
     fi
     
@@ -537,11 +561,11 @@ check_security() {
             ((warnings++))
         fi
         if echo "$security_opt" | grep -q "apparmor=unconfined"; then
-            echo -e "  ${LRED}[x]${NC} AppArmor désactivé"
+            echo -e "  ${LYELLOW}[!]${NC} ${LYELLOW}AppArmor désactivé${NC}"
             ((warnings++))
         fi
         if echo "$security_opt" | grep -q "label=disable"; then
-            echo -e "  ${LRED}[x]${NC} SELinux désactivé"
+            echo -e "  ${LYELLOW}[!]${NC} ${LYELLOW}SELinux désactivé${NC}"
             ((warnings++))
         fi
     fi
@@ -692,7 +716,7 @@ check_security() {
                 local var_name=$(echo "$line" | cut -d'=' -f1)
                 local var_value=$(echo "$line" | cut -d'=' -f2-)
                 # Utiliser ├─ pour toutes les variables utilisateur
-                echo -e "      ${DGRAY}├─${NC} ${YELLOW}$var_name=${NC}${LYELLOW}$var_value${NC}"
+                echo -e "      ${DGRAY}├─${NC} ${LYELLOW}$var_name=${NC}${LYELLOW}$var_value${NC}"
             done <<< "$(echo -e "$user_vars")"
         fi
         
@@ -703,7 +727,7 @@ check_security() {
         local label_count=$(echo "$sensitive_labels" | grep -c . 2>/dev/null || echo "0")
         # S'assurer que c'est un nombre
         [[ ! "$label_count" =~ ^[0-9]+$ ]] && label_count=0
-        echo -e "  ${YELLOW}[!]${NC} $label_count label(s) avec informations sensibles détecté(s)"
+        echo -e "  ${LYELLOW}[!]${NC} $label_count label(s) avec informations sensibles détecté(s)"
         # Afficher les labels sensibles détectés
         local label_line_num=0
         while IFS= read -r line; do
@@ -719,7 +743,7 @@ check_security() {
                 masked_value="***"
             fi
             # Utiliser ├─ pour tous les labels car le total sera toujours affiché après
-            echo -e "      ${DGRAY}├─${NC} ${YELLOW}$label_name=${NC}${LYELLOW}$masked_value${NC}"
+            echo -e "      ${DGRAY}├─${NC} ${LYELLOW}$label_name=${NC}${LYELLOW}$masked_value${NC}"
         done <<< "$sensitive_labels"
         ((warnings++))
     fi
@@ -727,7 +751,7 @@ check_security() {
     # 12. Flag no-new-privileges
     local no_new_privs=$(echo "$security_opt" | grep -o "no-new-privileges:true" || echo "")
     if [[ -z "$no_new_privs" ]]; then
-        echo -e "  ${YELLOW}[!]${NC} ${YELLOW}Flag --security-opt=no-new-privileges non défini${NC}"
+        echo -e "  ${LYELLOW}[!]${NC} ${LYELLOW}Flag --security-opt=no-new-privileges non défini${NC}"
         ((warnings++))
     else
         echo -e "  ${LGREEN}[+]${NC} Flag no-new-privileges activé (protection SUID/SGID)"
@@ -753,12 +777,12 @@ check_security() {
                 ((warnings++))
                 critical_device=true
             elif echo "$device" | grep -qE "/dev/tty|/dev/console"; then
-                echo -e "  ${YELLOW}[!]${NC} Device TTY/Console exposé : $device"
+                echo -e "  ${LYELLOW}[!]${NC} Device TTY/Console exposé : $device"
                 echo -e "      ${DGRAY}└─${NC} Peut permettre de capturer ou injecter des entrées clavier"
                 ((warnings++))
                 critical_device=true
             elif [[ "$device" == "/dev/fuse" ]]; then
-                echo -e "  ${YELLOW}[!]${NC} Device FUSE exposé : $device"
+                echo -e "  ${LYELLOW}[!]${NC} Device FUSE exposé : $device"
                 echo -e "      ${DGRAY}└─${NC} Permet de créer des systèmes de fichiers en userspace"
                 ((warnings++))
                 critical_device=true
@@ -795,7 +819,7 @@ check_security() {
                 ((warnings++))
                 dangerous_sysctl=true
             elif echo "$sysctl" | grep -qiE "net\.ipv4\.ip_forward|net\.ipv4\.conf\.all\.forwarding"; then
-                echo -e "  ${YELLOW}[!]${NC} SYSCTL réseau modifié : $sysctl"
+                echo -e "  ${LYELLOW}[!]${NC} SYSCTL réseau modifié : $sysctl"
                 echo -e "      ${DGRAY}└─${NC} Permet le routage IP (peut être légitime pour un proxy/router)"
                 ((warnings++))
                 dangerous_sysctl=true
@@ -830,9 +854,9 @@ check_security() {
         echo -e "  ${LRED}[x]${NC} ${LRED}CRITIQUE : Configuration permettant la manipulation des cgroups${NC}"
         echo -e "      ${DGRAY}├─${NC} ${LRED}Risque : Échappement de conteneur via release_agent (CVE-2022-0492)${NC}"
         for reason in "${cgroup_reasons[@]}"; do
-            echo -e "      ${DGRAY}├─${NC} ${LYELLOW}Raison : $reason${NC}"
+            echo -e "      ${DGRAY}├─${NC} ${LRED}Raison : $reason${NC}"
         done
-        echo -e "      ${DGRAY}└─${NC} ${LYELLOW}PoC : https://blog.trailofbits.com/2019/07/19/understanding-docker-container-escapes/${NC}"
+        echo -e "      ${DGRAY}└─${NC} ${LRED}PoC : https://blog.trailofbits.com/2019/07/19/understanding-docker-container-escapes/${NC}"
         ((warnings++))
     fi
     
@@ -848,12 +872,10 @@ check_security() {
                 echo -e "      ${DGRAY}└─${NC} Mise à jour du kernel de l'hôte Docker fortement recommandée"
                 ((warnings++))
             elif [[ "$kernel_major" -eq 4 ]] && [[ "$kernel_minor" -lt 15 ]]; then
-                echo -e "  ${YELLOW}[!]${NC} Kernel hôte potentiellement vulnérable : $kernel_version"
+                echo -e "  ${LYELLOW}[!]${NC} Kernel hôte potentiellement vulnérable : $kernel_version"
                 echo -e "      ${DGRAY}└─${NC} Vérifier les CVE associées à cette version"
                 ((warnings++))
             fi
-        else
-            log_debug "Version kernel non numérique détectée: $kernel_version"
         fi
     fi
     
@@ -886,16 +908,16 @@ check_security() {
     
     local resource_unlimited=false
     if [[ "$mem_limit" == "0" ]]; then
-        echo -e "  ${YELLOW}[!]${NC} ${YELLOW}RAM illimitée - Risque de déni de service (DoS)${NC}"
-        echo -e "      ${DGRAY}├─${NC} ${YELLOW}Exploitation : Memory exhaustion attack${NC}"
+        echo -e "  ${LYELLOW}[!]${NC} ${LYELLOW}RAM illimitée - Risque de déni de service (DoS)${NC}"
+        echo -e "      ${DGRAY}├─${NC} ${LYELLOW}Exploitation : Memory exhaustion attack${NC}"
         echo -e "      ${DGRAY}└─${NC} ${LYELLOW}Correction : docker run --memory=<limit> (ex: --memory=2g)${NC}"
         ((warnings++))
         resource_unlimited=true
     fi
     
     if [[ "$cpu_quota" == "-1" ]] || [[ "$cpu_quota" == "0" ]]; then
-        echo -e "  ${YELLOW}[!]${NC} ${YELLOW}CPU illimité - Risque de monopolisation CPU${NC}"
-        echo -e "      ${DGRAY}├─${NC} ${YELLOW}Exploitation : CPU exhaustion attack${NC}"
+        echo -e "  ${LYELLOW}[!]${NC} ${LYELLOW}CPU illimité - Risque de monopolisation CPU${NC}"
+        echo -e "      ${DGRAY}├─${NC} ${LYELLOW}Exploitation : CPU exhaustion attack${NC}"
         echo -e "      ${DGRAY}└─${NC} ${LYELLOW}Correction : docker run --cpus=<limit> (ex: --cpus=2)${NC}"
         ((warnings++))
         resource_unlimited=true
@@ -904,8 +926,8 @@ check_security() {
     # 21. Tag :latest (ANSSI/OWASP - HAUTE pour reproductibilité et traçabilité)
     local image_full=$(get_container_field "$cid" '{{.Config.Image}}')
     if echo "$image_full" | grep -qE ':latest$|^[^:]+$'; then
-        echo -e "  ${YELLOW}[!]${NC} ${YELLOW}Image avec tag :latest ou sans tag${NC}"
-        echo -e "      ${DGRAY}├─${NC} ${YELLOW}Risque : Déploiements non-déterministes, versions non traçables${NC}"
+        echo -e "  ${LYELLOW}[!]${NC} ${LYELLOW}Image avec tag :latest ou sans tag${NC}"
+        echo -e "      ${DGRAY}├─${NC} ${LYELLOW}Risque : Déploiements non-déterministes, versions non traçables${NC}"
         echo -e "      ${DGRAY}├─${NC} Image : ${LYELLOW}$image_full${NC}"
         echo -e "      ${DGRAY}└─${NC} ${LYELLOW}Correction : Utiliser des tags versionnés (ex: nginx:1.21.6)${NC}"
         ((warnings++))
@@ -914,8 +936,8 @@ check_security() {
     # 22. PIDs limit (CIS - HAUTE pour prévenir fork bomb)
     local pids_limit=$(get_container_field "$cid" '{{.HostConfig.PidsLimit}}')
     if [[ "$pids_limit" == "0" ]] || [[ "$pids_limit" == "-1" ]] || [[ -z "$pids_limit" ]]; then
-        echo -e "  ${YELLOW}[!]${NC} ${YELLOW}PIDs limit non défini - Risque de fork bomb${NC}"
-        echo -e "      ${DGRAY}├─${NC} ${YELLOW}Exploitation : :(){ :|:& };: (fork bomb)${NC}"
+        echo -e "  ${LYELLOW}[!]${NC} ${LYELLOW}PIDs limit non défini - Risque de fork bomb${NC}"
+        echo -e "      ${DGRAY}├─${NC} ${LYELLOW}Exploitation : :(){ :|:& };: (fork bomb)${NC}"
         echo -e "      ${DGRAY}└─${NC} ${LYELLOW}Correction : docker run --pids-limit=100${NC}"
         ((warnings++))
     fi
@@ -923,7 +945,7 @@ check_security() {
     # 23. Ulimits (ANSSI - MOYENNE)
     local ulimits=$(get_container_field "$cid" '{{.HostConfig.Ulimits}}')
     if [[ "$ulimits" == "[]" ]] || [[ "$ulimits" == "<no value>" ]] || [[ -z "$ulimits" ]]; then
-        echo -e "  ${YELLOW}[!]${NC} Ulimits non configurés (utilise les valeurs par défaut de l'hôte)"
+        echo -e "  ${LYELLOW}[!]${NC} ${LYELLOW}Ulimits non configurés (utilise les valeurs par défaut de l'hôte)${NC}"
         echo -e "      ${DGRAY}├─${NC} Risque : Épuisement des file descriptors/processus"
         echo -e "      ${DGRAY}└─${NC} ${LYELLOW}Correction : docker run --ulimit nofile=1024:2048${NC}"
         ((warnings++))
@@ -933,7 +955,7 @@ check_security() {
     local healthcheck=$(get_container_field "$cid" '{{.Config.Healthcheck}}' 2>/dev/null)
     # Vérifier si healthcheck est vide, null, ou contient des valeurs indiquant l'absence
     if [[ -z "$healthcheck" ]] || [[ "$healthcheck" =~ ^(<no value>|null|&lt;no value&gt;)$ ]]; then
-        echo -e "  ${YELLOW}[!]${NC} Healthcheck non défini"
+        echo -e "  ${LYELLOW}[!]${NC} ${LYELLOW}Healthcheck non défini${NC}"
         echo -e "      ${DGRAY}├─${NC} Pas de monitoring automatique de l'état du service"
         echo -e "      ${DGRAY}└─${NC} ${LYELLOW}Correction : HEALTHCHECK CMD curl -f http://localhost/ || exit 1${NC}"
         ((warnings++))
@@ -942,14 +964,14 @@ check_security() {
     # 25. Logging driver (ANSSI/CIS - HAUTE pour traçabilité)
     local log_driver=$(get_container_field "$cid" '{{.HostConfig.LogConfig.Type}}')
     if [[ "$log_driver" == "none" ]]; then
-        echo -e "  ${YELLOW}[!]${NC} ${YELLOW}Logging désactivé (driver: none)${NC}"
+        echo -e "  ${LYELLOW}[!]${NC} ${LYELLOW}Logging désactivé (driver: none)${NC}"
         echo -e "      ${DGRAY}├─${NC} ${LRED}Aucune traçabilité des événements${NC}"
         echo -e "      ${DGRAY}└─${NC} ${LYELLOW}Correction : Utiliser json-file, syslog, ou journald${NC}"
         ((warnings++))
     elif [[ "$log_driver" == "json-file" ]]; then
         local log_max_size=$(get_container_field "$cid" '{{.HostConfig.LogConfig.Config.max-size}}')
         if [[ -z "$log_max_size" ]] || [[ "$log_max_size" == "<no value>" ]]; then
-            echo -e "  ${YELLOW}[!]${NC} Logs sans limite de taille (risque de saturation disque)"
+            echo -e "  ${LYELLOW}[!]${NC} Logs sans limite de taille (risque de saturation disque)"
             echo -e "      ${DGRAY}└─${NC} ${LYELLOW}Correction : docker run --log-opt max-size=10m --log-opt max-file=3${NC}"
             ((warnings++))
         fi
@@ -960,14 +982,14 @@ check_security() {
     if [[ "$restart_policy" == "no" ]] || [[ -z "$restart_policy" ]]; then
         echo -e "  ${LBLUE}[i]${NC} Restart policy non configuré (le conteneur ne redémarrera pas automatiquement)"
     elif [[ "$restart_policy" == "always" ]]; then
-        echo -e "  ${YELLOW}[!]${NC} Restart policy 'always' (peut masquer des crashs répétés)"
+        echo -e "  ${LYELLOW}[!]${NC} Restart policy 'always' (peut masquer des crashs répétés)"
         echo -e "      ${DGRAY}└─${NC} Considérer 'on-failure' avec un max-retry"
     fi
     
     # 27. OOM Score adjustment (CIS - BASSE)
     local oom_score=$(get_container_field "$cid" '{{.HostConfig.OomScoreAdj}}')
     if [[ -n "$oom_score" ]] && [[ "$oom_score" != "<no value>" ]] && [[ "$oom_score" =~ ^-?[0-9]+$ ]] && [[ "$oom_score" -lt -500 ]]; then
-        echo -e "  ${YELLOW}[!]${NC} OOM Score très bas ($oom_score) - Le conteneur sera protégé du OOM killer"
+        echo -e "  ${LYELLOW}[!]${NC} OOM Score très bas ($oom_score) - Le conteneur sera protégé du OOM killer"
         echo -e "      ${DGRAY}└─${NC} Peut affecter la stabilité du système en cas de pression mémoire"
     fi
     
@@ -983,7 +1005,7 @@ check_security() {
     if [[ $warnings -eq 0 ]]; then
         echo -e "  ${LGREEN}[+]${NC} ${LGREEN}Aucune alerte de sécurité majeure${NC}"
     elif [[ $warnings -le 2 ]]; then
-        echo -e "  ${YELLOW}[!]${NC} $warnings alerte(s) de sécurité détectée(s)"
+        echo -e "  ${LYELLOW}[!]${NC} $warnings alerte(s) de sécurité détectée(s)"
     else
         echo -e "  ${LRED}[x]${NC} ${LRED}$warnings alerte(s) de sécurité détectée(s) - RÉVISION RECOMMANDÉE${NC}"
     fi
@@ -996,7 +1018,7 @@ check_security() {
 # Fonction d'affichage des conteneurs (réutilisable)
 display_containers() {
     local filter="$1"  # "" pour running, "status=exited" pour stopped
-    local title_color="$2"  # LGREEN ou YELLOW
+    local title_color="$2"  # LGREEN ou LYELLOW
     local title="$3"
     local status_width="$4"  # 20 ou 23
     local ports_width="$5"  # 30 ou 20
@@ -1339,26 +1361,11 @@ main() {
                 show_help
                 exit 0
                 ;;
-            -v|--verbose)
-                VERBOSE=true
-                shift
-                ;;
             --no-color)
-                # Désactiver les couleurs (vider toutes les variables de couleur)
-                RED=''
-                LRED=''
-                GREEN=''
-                LGREEN=''
-                YELLOW=''
-                LYELLOW=''
-                BLUE=''
-                LBLUE=''
-                CYAN=''
-                LCYAN=''
-                MAGENTA=''
-                LMAGENTA=''
-                DGRAY=''
-                NC=''
+                # Désactiver les couleurs (redéfinir toutes les variables)
+                for color_var in RED LRED GREEN LGREEN LYELLOW ORANGE BLUE LBLUE CYAN LCYAN MAGENTA LMAGENTA DGRAY NC; do
+                    eval "$color_var=''"
+                done
                 NO_COLOR=true
                 shift
                 ;;
@@ -1390,33 +1397,47 @@ main() {
     detect_container_engine || exit 1
     
     log_info "Moteur de conteneurs: ${LGREEN}$DOCKER_CMD${NC}"
-    log_debug "Utilisation de docker inspect --format (pas de dépendance externe)"
-    
-    [[ "$VERBOSE" == "true" ]] && log_info "Mode verbeux activé"
     
     # Audit de sécurité des conteneurs
     print_section "AUDIT DE SÉCURITÉ DES CONTENEURS"
     
     local running_containers
     mapfile -t running_containers < <("$DOCKER_CMD" ps -q 2>/dev/null)
+    local stopped_containers
+    mapfile -t stopped_containers < <("$DOCKER_CMD" ps -a -f "status=exited" -q 2>/dev/null)
     
     local running_count=${#running_containers[@]}
+    local stopped_count=${#stopped_containers[@]}
+    local total_count=$((running_count + stopped_count))
     
-    if [[ $running_count -eq 0 ]]; then
-        echo "Aucun conteneur en cours d'exécution."
+    if [[ $total_count -eq 0 ]]; then
+        echo "Aucun conteneur trouvé."
         exit 0
     fi
     
-    log_info "Analyse de ${LGREEN}$running_count${NC} conteneur(s)..."
+    log_info "Analyse de ${LGREEN}$total_count${NC} conteneur(s) (${LGREEN}$running_count${NC} actif(s), ${LRED}$stopped_count${NC} arrêté(s))..."
     echo
     
     # Analyse séquentielle de tous les conteneurs (audit de sécurité uniquement)
+    # D'abord les conteneurs actifs
     for cid in "${running_containers[@]}"; do
         validate_container_id "$cid" || continue
         
         local name=$(get_container_field "$cid" '{{.Name}}' | sed 's|/||')
         print_subsection "$name ($cid)"
-        check_security "$cid" "$name"
+        check_security "$cid" "$name" "true"
+        echo
+        echo -e "${DGRAY}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+        echo
+    done
+    
+    # Ensuite les conteneurs arrêtés
+    for cid in "${stopped_containers[@]}"; do
+        validate_container_id "$cid" || continue
+        
+        local name=$(get_container_field "$cid" '{{.Name}}' | sed 's|/||')
+        print_subsection "$name ($cid)"
+        check_security "$cid" "$name" "false"
         echo
         echo -e "${DGRAY}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
         echo
@@ -1424,6 +1445,45 @@ main() {
     
     # Résumé final
     print_section "RÉSUMÉ"
+    
+    # Vue d'ensemble des conteneurs
+    print_subsection "Vue d'ensemble"
+    echo -e "  ${LGREEN}[+]${NC} Conteneurs actifs  : ${LGREEN}$running_count${NC}"
+    
+    # Afficher la liste des conteneurs actifs
+    if [[ $running_count -gt 0 ]]; then
+        local idx=0
+        for cid in "${running_containers[@]}"; do
+            local name=$(get_container_field "$cid" '{{.Name}}')
+            name="${name#/}"  # Enlever le / au début si présent
+            ((idx++))
+            if [[ $idx -eq $running_count ]]; then
+                echo -e "      ${DGRAY}└─${NC} ${LGREEN}$name${NC}"
+            else
+                echo -e "      ${DGRAY}├─${NC} ${LGREEN}$name${NC}"
+            fi
+        done
+    fi
+    
+    local stopped_count=${#stopped_containers[@]}
+    if [[ $stopped_count -gt 0 ]]; then
+        echo -e "  ${LRED}[x]${NC} Conteneurs arrêtés : ${LRED}$stopped_count${NC}"
+        
+        # Afficher la liste des conteneurs arrêtés
+        local idx=0
+        for cid in "${stopped_containers[@]}"; do
+            local name=$(get_container_field "$cid" '{{.Name}}')
+            name="${name#/}"  # Enlever le / au début si présent
+            ((idx++))
+            if [[ $idx -eq $stopped_count ]]; then
+                echo -e "      ${DGRAY}└─${NC} ${LRED}$name${NC}"
+            else
+                echo -e "      ${DGRAY}├─${NC} ${LRED}$name${NC}"
+            fi
+        done
+    fi
+    
+    echo
     
     # Compteurs de sécurité uniquement
     
@@ -1450,9 +1510,18 @@ main() {
     local containers_without_healthcheck=0
     local containers_with_no_logging=0
     
-    for cid in "${running_containers[@]}"; do
+    # Analyser tous les conteneurs (running et stopped)
+    for cid in "${running_containers[@]}" "${stopped_containers[@]}"; do
         # Audit de sécurité du conteneur
         local container_issues=0
+        local is_running=false
+        # Vérifier si le conteneur est en cours d'exécution
+        for running_cid in "${running_containers[@]}"; do
+            if [[ "$cid" == "$running_cid" ]]; then
+                is_running=true
+                break
+            fi
+        done
         
         # Vérification utilisateur root
         local user=$(get_container_field "$cid" '{{.Config.User}}')
@@ -1532,10 +1601,12 @@ main() {
             ((container_issues++))
         fi
         
-        # Vérification credentials cloud
-        if $DOCKER_CMD exec "$cid" sh -c "test -d /root/.aws -o -d /root/.config/gcloud -o -d /root/.azure" 2>/dev/null; then
-            ((containers_with_cloud_creds++))
-            ((container_issues++))
+        # Vérification credentials cloud (uniquement pour les conteneurs running)
+        if [[ "$is_running" == "true" ]]; then
+            if $DOCKER_CMD exec "$cid" sh -c "test -d /root/.aws -o -d /root/.config/gcloud -o -d /root/.azure" 2>/dev/null; then
+                ((containers_with_cloud_creds++))
+                ((container_issues++))
+            fi
         fi
         
         # Vérification Seccomp désactivé
@@ -1594,11 +1665,11 @@ main() {
     done
     
     # Affichage de l'audit de sécurité
-    if [[ $running_count -gt 0 ]]; then
+    if [[ $total_count -gt 0 ]]; then
         print_subsection "Audit de Sécurité"
-        echo -e "  ${LBLUE}[+]${NC} Conteneurs analysés : ${LBLUE}$running_count${NC}"
-        echo -e "  ${DGRAY}├─${NC} ${LGREEN}Conteneurs sécurisés${NC} : $containers_secure"
-        echo -e "  ${DGRAY}└─${NC} ${LRED}Conteneurs avec alertes${NC} : $((running_count - containers_secure))"
+        echo -e "  ${LGREEN}[+]${NC} Conteneurs analysés : $total_count"
+        echo -e "      ${DGRAY}├─${NC} Conteneurs sécurisés : $containers_secure"
+        echo -e "      ${DGRAY}└─${NC} Conteneurs avec alertes : $((total_count - containers_secure))"
         echo
         
         if [[ $total_security_issues -gt 0 ]]; then
@@ -1607,22 +1678,22 @@ main() {
             [[ $containers_with_root -gt 0 ]] && echo -e "  ${LRED}[x]${NC} ${LRED}$containers_with_root${NC} conteneur(s) exécuté(s) en root"
             [[ $containers_privileged -gt 0 ]] && echo -e "  ${LRED}[x]${NC} ${LRED}$containers_privileged${NC} conteneur(s) en mode privilégié"
             [[ $containers_with_docker_socket -gt 0 ]] && echo -e "  ${LRED}[x]${NC} ${LRED}$containers_with_docker_socket${NC} conteneur(s) avec accès au socket Docker ${LRED}[CRITIQUE]${NC}"
-            [[ $containers_with_host_pid -gt 0 ]] && echo -e "  ${LRED}[x]${NC} ${LRED}$containers_with_host_pid${NC} conteneur(s) avec namespace PID host"
-            [[ $containers_with_host_network -gt 0 ]] && echo -e "  ${LRED}[x]${NC} ${LRED}$containers_with_host_network${NC} conteneur(s) en mode réseau host"
+            [[ $containers_with_host_pid -gt 0 ]] && echo -e "  ${ORANGE}[!]${NC} ${ORANGE}$containers_with_host_pid${NC} conteneur(s) avec namespace PID host ${ORANGE}[HAUTE]${NC}"
+            [[ $containers_with_host_network -gt 0 ]] && echo -e "  ${ORANGE}[!]${NC} ${ORANGE}$containers_with_host_network${NC} conteneur(s) en mode réseau host ${ORANGE}[HAUTE]${NC}"
             [[ $containers_with_sensitive_mounts -gt 0 ]] && echo -e "  ${LRED}[x]${NC} ${LRED}$containers_with_sensitive_mounts${NC} conteneur(s) avec montages système sensibles"
-            [[ $containers_with_sensitive_vars -gt 0 ]] && echo -e "  ${LRED}[x]${NC} ${LRED}$containers_with_sensitive_vars${NC} conteneur(s) avec variables sensibles exposées ${LRED}[CREDENTIALS]${NC}"
+            [[ $containers_with_sensitive_vars -gt 0 ]] && echo -e "  ${ORANGE}[!]${NC} ${ORANGE}$containers_with_sensitive_vars${NC} conteneur(s) avec variables sensibles exposées ${ORANGE}[HAUTE]${NC}"
             [[ $containers_with_dangerous_caps -gt 0 ]] && echo -e "  ${LRED}[x]${NC} ${LRED}$containers_with_dangerous_caps${NC} conteneur(s) avec capabilities DANGEREUSES ${LRED}[CAP_SYS_ADMIN, etc.]${NC}"
-            [[ $containers_without_no_new_privs -gt 0 ]] && echo -e "  ${YELLOW}[!]${NC} ${YELLOW}$containers_without_no_new_privs${NC} conteneur(s) sans flag no-new-privileges ${YELLOW}[SUID/SGID]${NC}"
+            [[ $containers_without_no_new_privs -gt 0 ]] && echo -e "  ${LYELLOW}[!]${NC} ${LYELLOW}$containers_without_no_new_privs${NC} conteneur(s) sans flag no-new-privileges ${LYELLOW}[SUID/SGID]${NC}"
             [[ $containers_with_dangerous_devices -gt 0 ]] && echo -e "  ${LRED}[x]${NC} ${LRED}$containers_with_dangerous_devices${NC} conteneur(s) avec devices CRITIQUES exposés ${LRED}[/dev/sda, /dev/mem]${NC}"
             [[ $containers_with_cgroup_access -gt 0 ]] && echo -e "  ${LRED}[x]${NC} ${LRED}$containers_with_cgroup_access${NC} conteneur(s) avec config risque cgroups ${LRED}[CONTAINER ESCAPE]${NC}"
             [[ $containers_with_cloud_creds -gt 0 ]] && echo -e "  ${LRED}[x]${NC} ${LRED}$containers_with_cloud_creds${NC} conteneur(s) avec credentials cloud détectés ${LRED}[AWS/GCP/Azure]${NC}"
             [[ $containers_with_seccomp_disabled -gt 0 ]] && echo -e "  ${LRED}[x]${NC} ${LRED}$containers_with_seccomp_disabled${NC} conteneur(s) avec Seccomp DÉSACTIVÉ ${LRED}[ALL SYSCALLS]${NC}"
-            [[ $containers_with_unlimited_resources -gt 0 ]] && echo -e "  ${YELLOW}[!]${NC} ${YELLOW}$containers_with_unlimited_resources${NC} conteneur(s) avec ressources ILLIMITÉES ${YELLOW}[DoS RISK]${NC}"
-            [[ $containers_with_latest_tag -gt 0 ]] && echo -e "  ${YELLOW}[!]${NC} ${YELLOW}$containers_with_latest_tag${NC} conteneur(s) avec tag :latest ${YELLOW}[NON-DETERMINISTIC]${NC}"
-            [[ $containers_without_pids_limit -gt 0 ]] && echo -e "  ${YELLOW}[!]${NC} ${YELLOW}$containers_without_pids_limit${NC} conteneur(s) sans PIDs limit ${YELLOW}[FORK BOMB]${NC}"
-            [[ $containers_without_ulimits -gt 0 ]] && echo -e "  ${YELLOW}[!]${NC} ${YELLOW}$containers_without_ulimits${NC} conteneur(s) sans ulimits configurés"
-            [[ $containers_without_healthcheck -gt 0 ]] && echo -e "  ${YELLOW}[!]${NC} ${YELLOW}$containers_without_healthcheck${NC} conteneur(s) sans healthcheck"
-            [[ $containers_with_no_logging -gt 0 ]] && echo -e "  ${YELLOW}[!]${NC} ${YELLOW}$containers_with_no_logging${NC} conteneur(s) avec logging DÉSACTIVÉ ${YELLOW}[NO AUDIT]${NC}"
+            [[ $containers_with_unlimited_resources -gt 0 ]] && echo -e "  ${ORANGE}[!]${NC} ${ORANGE}$containers_with_unlimited_resources${NC} conteneur(s) avec ressources ILLIMITÉES ${ORANGE}[DoS RISK]${NC}"
+            [[ $containers_with_latest_tag -gt 0 ]] && echo -e "  ${ORANGE}[!]${NC} ${ORANGE}$containers_with_latest_tag${NC} conteneur(s) avec tag :latest ${ORANGE}[NON-DETERMINISTIC]${NC}"
+            [[ $containers_without_pids_limit -gt 0 ]] && echo -e "  ${ORANGE}[!]${NC} ${ORANGE}$containers_without_pids_limit${NC} conteneur(s) sans PIDs limit ${ORANGE}[FORK BOMB]${NC}"
+            [[ $containers_without_ulimits -gt 0 ]] && echo -e "  ${LYELLOW}[!]${NC} ${LYELLOW}$containers_without_ulimits${NC} conteneur(s) sans ulimits configurés"
+            [[ $containers_without_healthcheck -gt 0 ]] && echo -e "  ${LYELLOW}[!]${NC} ${LYELLOW}$containers_without_healthcheck${NC} conteneur(s) sans healthcheck"
+            [[ $containers_with_no_logging -gt 0 ]] && echo -e "  ${ORANGE}[!]${NC} ${ORANGE}$containers_with_no_logging${NC} conteneur(s) avec logging DÉSACTIVÉ ${ORANGE}[NO AUDIT]${NC}"
             
             echo
             echo -e "  ${LRED}Total : $total_security_issues alerte(s) de sécurité${NC}"
@@ -1641,10 +1712,45 @@ main() {
                 echo
             fi
             
+            if [[ $containers_with_docker_socket -gt 0 ]]; then
+                echo -e "  ${LRED}[CRITIQUE]${NC} Socket Docker/Podman monté - Vecteurs d'échappement de conteneur détectés :"
+                echo -e "      ${DGRAY}├─${NC} ${LRED}Le mode RO n'est PAS une protection réelle contre l'API Docker/Podman${NC}"
+                echo -e "      ${DGRAY}├─${NC} ${LRED}Les permissions Unix ro ne bloquent pas les requêtes HTTP (POST/DELETE/PUT)${NC}"
+                echo -e "      ${DGRAY}├─${NC} ${LRED}Accès au socket = contrôle équivalent à root Docker/Podman${NC}"
+                echo -e "      ${DGRAY}├─${NC} ${LYELLOW}Solution recommandée : NE PAS monter le socket${NC}"
+                echo -e "      ${DGRAY}├─${NC} ${LYELLOW}Alternative : Utiliser un proxy API sécurisé qui limite les opérations autorisées${NC}"
+                echo -e "      ${DGRAY}├─${NC} ${LYELLOW}Exemples de proxies : Docker Socket Proxy, Traefik avec filtres API${NC}"
+                echo -e "      ${DGRAY}└─${NC} ${LYELLOW}Si nécessaire : User namespaces, AppArmor/SELinux, runtimes isolés (gVisor, Kata)${NC}"
+                echo
+            fi
+            
             if [[ $containers_with_root -gt 0 ]]; then
-                echo -e "  ${YELLOW}[HAUTE]${NC} Conteneurs exécutés en root :"
-                echo -e "      ${DGRAY}├─${NC} Ajouter 'USER <non-root>' dans le Dockerfile"
+                echo -e "  ${LRED}[CRITIQUE]${NC} Conteneurs exécutés en root :"
+                echo -e "      ${DGRAY}├─${NC} ${LRED}Risque d'escalade de privilèges si échappement de conteneur${NC}"
+                echo -e "      ${DGRAY}├─${NC} ${LYELLOW}Ajouter 'USER <non-root>' dans le Dockerfile${NC}"
                 echo -e "      ${DGRAY}└─${NC} ${LYELLOW}docker run --user <uid>:<gid>${NC}"
+                echo
+            fi
+            
+            if [[ $containers_with_sensitive_vars -gt 0 ]]; then
+                echo -e "  ${ORANGE}[HAUTE]${NC} Variables sensibles exposées :"
+                echo -e "      ${DGRAY}├─${NC} ${LYELLOW}Risque d'exposition de credentials (passwords, tokens, API keys)${NC}"
+                echo -e "      ${DGRAY}├─${NC} ${LYELLOW}Utiliser des secrets managers (Docker secrets, Vault, AWS Secrets Manager)${NC}"
+                echo -e "      ${DGRAY}└─${NC} ${LYELLOW}docker run --secret ou variables d'environnement via fichiers montés${NC}"
+                echo
+            fi
+            
+            if [[ $containers_without_no_new_privs -gt 0 ]]; then
+                echo -e "  ${LYELLOW}[MOYENNE]${NC} Flag no-new-privileges absent :"
+                echo -e "      ${DGRAY}├─${NC} ${LYELLOW}Risque d'escalade via binaires SUID/SGID${NC}"
+                echo -e "      ${DGRAY}└─${NC} ${LYELLOW}docker run --security-opt=no-new-privileges${NC}"
+                echo
+            fi
+            
+            if [[ $containers_without_ulimits -gt 0 ]]; then
+                echo -e "  ${LYELLOW}[MOYENNE]${NC} Ulimits non configurés :"
+                echo -e "      ${DGRAY}├─${NC} ${LYELLOW}Risque d'épuisement des file descriptors/processus${NC}"
+                echo -e "      ${DGRAY}└─${NC} ${LYELLOW}docker run --ulimit nofile=1024:2048${NC}"
                 echo
             fi
             
@@ -1656,31 +1762,31 @@ main() {
             fi
             
             if [[ $containers_with_unlimited_resources -gt 0 ]]; then
-                echo -e "  ${YELLOW}[HAUTE]${NC} Ressources illimitées (DoS) :"
-                echo -e "      ${DGRAY}├─${NC} ${YELLOW}Risque de déni de service par épuisement RAM/CPU${NC}"
+                echo -e "  ${ORANGE}[HAUTE]${NC} Ressources illimitées (DoS) :"
+                echo -e "      ${DGRAY}├─${NC} ${LYELLOW}Risque de déni de service par épuisement RAM/CPU${NC}"
                 echo -e "      ${DGRAY}├─${NC} ${LYELLOW}docker run --memory=2g --memory-swap=2g${NC}"
                 echo -e "      ${DGRAY}└─${NC} ${LYELLOW}docker run --cpus=2 --cpu-shares=1024${NC}"
                 echo
             fi
             
             if [[ $containers_with_latest_tag -gt 0 ]]; then
-                echo -e "  ${YELLOW}[HAUTE]${NC} Tag :latest utilisé :"
-                echo -e "      ${DGRAY}├─${NC} ${YELLOW}Déploiements non reproductibles, versions non traçables${NC}"
+                echo -e "  ${ORANGE}[HAUTE]${NC} Tag :latest utilisé :"
+                echo -e "      ${DGRAY}├─${NC} ${LYELLOW}Déploiements non reproductibles, versions non traçables${NC}"
                 echo -e "      ${DGRAY}├─${NC} Utiliser des tags versionnés spécifiques"
                 echo -e "      ${DGRAY}└─${NC} ${LYELLOW}Exemple : nginx:1.21.6 au lieu de nginx:latest${NC}"
                 echo
             fi
             
             if [[ $containers_without_pids_limit -gt 0 ]]; then
-                echo -e "  ${YELLOW}[HAUTE]${NC} PIDs limit non défini (fork bomb) :"
-                echo -e "      ${DGRAY}├─${NC} ${LRED}Risque de fork bomb paralysant le système${NC}"
+                echo -e "  ${ORANGE}[HAUTE]${NC} PIDs limit non défini (fork bomb) :"
+                echo -e "      ${DGRAY}├─${NC} ${LYELLOW}Risque de fork bomb paralysant le système${NC}"
                 echo -e "      ${DGRAY}└─${NC} ${LYELLOW}docker run --pids-limit=100${NC}"
                 echo
             fi
             
             if [[ $containers_with_no_logging -gt 0 ]]; then
-                echo -e "  ${YELLOW}[HAUTE]${NC} Logging désactivé :"
-                echo -e "      ${DGRAY}├─${NC} ${YELLOW}Aucune traçabilité en cas d'incident${NC}"
+                echo -e "  ${ORANGE}[HAUTE]${NC} Logging désactivé :"
+                echo -e "      ${DGRAY}├─${NC} ${LYELLOW}Aucune traçabilité en cas d'incident${NC}"
                 echo -e "      ${DGRAY}├─${NC} ${LYELLOW}docker run --log-driver=json-file${NC}"
                 echo -e "      ${DGRAY}└─${NC} ${LYELLOW}docker run --log-opt max-size=10m --log-opt max-file=3${NC}"
                 echo
