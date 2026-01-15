@@ -85,7 +85,7 @@ wsl -d kali-linux -- bash -c "git clone https://github.com/RunasRs/DockNova.git 
 |--------|-------------|--------|
 | 🔴 **CRITIQUE** | Faille permettant échappement conteneur ou compromission système | Correction **IMMÉDIATE** requise |
 | 🟠 **HAUTE** | Risque significatif de compromission ou DoS | Correction **PRIORITAIRE** |
-| 🟡 **MOYENNE**| Impact opérationnel ou risque modéré | Correction **RECOMMANDÉE** |
+| 🟡 **MOYENNE** | Impact opérationnel ou risque modéré | Correction **RECOMMANDÉE** |
 
 
 
@@ -93,7 +93,7 @@ wsl -d kali-linux -- bash -c "git clone https://github.com/RunasRs/DockNova.git 
 ## Exemple de sortie
 
 ```
-  ▶ traefik-proxy-vlan (7e4125670a58)
+  ▶ ubuntu-proxy (7e4125670a58)
 
 Audit de sécurité :
   [x] Conteneur exécuté en root (User non défini = root par défaut)
