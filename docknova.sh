@@ -1,9 +1,8 @@
 #!/usr/bin/env bash
 
 # =============================================================================
-# DockNova - Audit de Sécurité Docker Professionnel
-# Version: 2.0 (Optimisée)
-# Références: CIS Docker Benchmark, ANSSI, OWASP Docker Security
+# DockNova - Inventaire Docker Professionnel
+# Version: 2.0 (Inventaire uniquement)
 # =============================================================================
 
 # Hardening du script
@@ -17,6 +16,7 @@ trap 'echo -e "\n${LRED}[x] Script interrompu${NC}" >&2; exit 130' INT TERM
 # CONFIGURATION ET CONSTANTES
 # =============================================================================
 
+# Couleurs (readonly pour éviter modification)
 # Couleurs (non-readonly pour permettre désactivation avec --no-color)
 RED='\033[0;31m'
 LRED='\033[1;31m'
@@ -35,7 +35,7 @@ NC='\033[0m'
 
 # Configuration
 readonly VERSION="2.0"
-readonly SCRIPT_NAME="DockNova"
+readonly SCRIPT_NAME="DockNova Inventaire"
 
 # Options de ligne de commande
 
@@ -90,7 +90,7 @@ log_success() {
 
 # Affichage de l'aide
 show_help() {
-    echo -e "${LGREEN}${SCRIPT_NAME}${NC} v${VERSION} - Audit de Sécurité Docker Professionnel"
+    echo -e "${LGREEN}${SCRIPT_NAME}${NC} v${VERSION} - Inventaire Docker Professionnel"
     echo ""
     echo -e "${LBLUE}USAGE:${NC}"
     echo -e "    $(basename "$0") [OPTIONS]"
@@ -169,6 +169,15 @@ truncate_text() {
     fi
 }
 
+# Fonction pour supprimer les codes ANSI d'une chaîne
+strip_ansi() {
+    local text="$1"
+    # Supprimer les codes ANSI : séquences ESC[...m (tous formats)
+    # Gère les séquences littérales \033[...m (comme retournées par Docker)
+    # et les vraies séquences d'échappement \x1b[...m
+    echo "$text" | sed -E 's/\\033\[[0-9;]*m//g' | sed -E 's/\x1b\[[0-9;]*m//g' | sed -E 's/\e\[[0-9;]*m//g'
+}
+
 print_section() {
     local title="$1"
     local total_width=87
@@ -198,7 +207,7 @@ print_section() {
 print_subsection() {
     local subtitle="$1"
     echo ""
-    echo -e "  ${LBLUE}▶ $subtitle${NC}"
+    echo -e "  ${LBLUE}▶ $subtitle ${NC}"
     echo ""
 }
 
@@ -235,10 +244,12 @@ detect_sensitive_data() {
 }
 
 # =============================================================================
-# FONCTION DE VÉRIFICATION DE SÉCURITÉ COMPLÈTE
+# FONCTION DE VÉRIFICATION DE SÉCURITÉ COMPLÈTE (DÉSACTIVÉE DANS INVENTAIRE)
 # =============================================================================
 
+# Fonction désactivée - voir docknova_securite.sh pour l'audit de sécurité
 check_security() {
+    return 0
     local cid="$1"
     local name="$2"
     local warnings=0
@@ -290,8 +301,8 @@ check_security() {
             dangerous_caps_found=true
         fi
         if echo "$cap_add" | grep -qiE "SYS_PTRACE"; then
-            echo -e "  ${LYELLOW}[!]${NC} ${LYELLOW}Capability SYS_PTRACE ajoutée${NC}"
-            echo -e "      ${DGRAY}├─${NC} ${LYELLOW}Exploitation : Injection de code dans les processus de l'hôte${NC}"
+            echo -e "  ${LRED}[x]${NC} ${LRED}Capability SYS_PTRACE ajoutée${NC}"
+            echo -e "      ${DGRAY}├─${NC} ${LRED}Exploitation : Injection de code dans les processus de l'hôte${NC}"
             echo -e "      ${DGRAY}└─${NC} ${LYELLOW}Permet d'utiliser ptrace() pour attacher et modifier des processus${NC}"
             ((warnings++))
             dangerous_caps_found=true
@@ -449,7 +460,7 @@ check_security() {
     # 4.3. Vérifier si d'autres répertoires Docker sont montés
     if echo "$volumes" | grep -q "/var/lib/docker"; then
         echo -e "  ${LRED}[x]${NC} ${LRED}Répertoire Docker monté (/var/lib/docker)${NC}"
-        echo -e "      ${DGRAY}├─${NC} ${LRED}Accès direct aux données Docker (images, volumes, conteneurs)${NC}"
+        echo -e "      ${DGRAY}├─${NC} Accès direct aux données Docker (images, volumes, conteneurs)"
         echo -e "      ${DGRAY}└─${NC} ${LRED}Possibilité de manipulation des données Docker${NC}"
         ((warnings++))
         docker_socket_found=true
@@ -458,8 +469,8 @@ check_security() {
     # 4.4. Détecter les variables d'environnement Docker exposées
     local docker_host_var=$(get_container_field "$cid" '{{range .Config.Env}}{{println .}}{{end}}' | grep "DOCKER_HOST=" || echo "")
     if [[ -n "$docker_host_var" ]]; then
-        echo -e "  ${LRED}[x]${NC} ${LRED}Variable DOCKER_HOST détectée : $docker_host_var${NC}"
-        echo -e "      ${DGRAY}└─${NC} ${LRED}Accès potentiel à un daemon Docker distant${NC}"
+        echo -e "  ${LRED}[x]${NC} Variable DOCKER_HOST détectée : ${LYELLOW}$docker_host_var${NC}"
+        echo -e "      ${DGRAY}└─${NC} Accès potentiel à un daemon Docker distant"
         ((warnings++))
         docker_socket_found=true
     fi
@@ -507,7 +518,7 @@ check_security() {
     
     # 5. Namespace PID
     if [[ "$pid_mode" == "host" ]]; then
-        echo -e "  ${LYELLOW}[!]${NC} ${LYELLOW}Namespace PID partagé avec l'hôte (--pid=host)${NC}"
+        echo -e "  ${LRED}[x]${NC} Namespace PID partagé avec l'hôte (--pid=host)"
         ((warnings++))
     fi
     
@@ -519,7 +530,7 @@ check_security() {
     
     # 7. Mode réseau
     if [[ "$network_mode" == "host" ]]; then
-        echo -e "  ${LYELLOW}[!]${NC} ${LYELLOW}Mode réseau host (--network=host)${NC}"
+        echo -e "  ${LRED}[x]${NC} Mode réseau host (--network=host)"
         ((warnings++))
     fi
     
@@ -532,11 +543,11 @@ check_security() {
             ((warnings++))
         fi
         if echo "$security_opt" | grep -q "apparmor=unconfined"; then
-            echo -e "  ${LYELLOW}[!]${NC} ${LYELLOW}AppArmor désactivé${NC}"
+            echo -e "  ${LRED}[x]${NC} AppArmor désactivé"
             ((warnings++))
         fi
         if echo "$security_opt" | grep -q "label=disable"; then
-            echo -e "  ${LYELLOW}[!]${NC} ${LYELLOW}SELinux désactivé${NC}"
+            echo -e "  ${LRED}[x]${NC} SELinux désactivé"
             ((warnings++))
         fi
     fi
@@ -588,7 +599,7 @@ check_security() {
     fi
     
     if [[ $sensitive_count -gt 0 ]]; then
-        echo -e "      ${DGRAY}└─${NC} ${LRED}Total : $sensitive_count donnée(s) sensible(s) exposée(s)${NC}"
+        echo -e "  ${DGRAY}└─${NC} ${LRED}Total : $sensitive_count donnée(s) sensible(s) exposée(s)${NC}"
     fi
     
     # 12. Flag no-new-privileges
@@ -741,7 +752,7 @@ check_security() {
         ((warnings++))
     fi
     
-    # 20. Limites de ressources (ANSSI/CIS - HAUTE pour prévenir DoS)
+    # 20. Limites de ressources (ANSSI/CIS - CRITIQUE pour prévenir DoS)
     local mem_limit=$(get_container_field "$cid" '{{.HostConfig.Memory}}')
     local cpu_quota=$(get_container_field "$cid" '{{.HostConfig.CpuQuota}}')
     local cpu_shares=$(get_container_field "$cid" '{{.HostConfig.CpuShares}}')
@@ -767,8 +778,8 @@ check_security() {
     local image_full=$(get_container_field "$cid" '{{.Config.Image}}')
     if echo "$image_full" | grep -qE ':latest$|^[^:]+$'; then
         echo -e "  ${LYELLOW}[!]${NC} ${LYELLOW}Image avec tag :latest ou sans tag${NC}"
-        echo -e "      ${DGRAY}├─${NC} ${LYELLOW}Risque : Déploiements non-déterministes, versions non traçables${NC}"
-        echo -e "      ${DGRAY}├─${NC} ${LYELLOW}Image : $image_full${NC}"
+        echo -e "      ${DGRAY}├─${NC} ${LYELLOW}Risque : tag non traçable${NC}"
+        echo -e "      ${DGRAY}├─${NC} Image : ${LYELLOW}$image_full${NC}"
         echo -e "      ${DGRAY}└─${NC} ${LYELLOW}Correction : Utiliser des tags versionnés (ex: nginx:1.21.6)${NC}"
         ((warnings++))
     fi
@@ -786,7 +797,7 @@ check_security() {
     local ulimits=$(get_container_field "$cid" '{{.HostConfig.Ulimits}}')
     if [[ "$ulimits" == "[]" ]] || [[ "$ulimits" == "<no value>" ]] || [[ -z "$ulimits" ]]; then
         echo -e "  ${LYELLOW}[!]${NC} ${LYELLOW}Ulimits non configurés (utilise les valeurs par défaut de l'hôte)${NC}"
-        echo -e "      ${DGRAY}├─${NC} ${LYELLOW}Risque : Épuisement des file descriptors/processus${NC}"
+        echo -e "      ${DGRAY}├─${NC} Risque : Épuisement des file descriptors/processus"
         echo -e "      ${DGRAY}└─${NC} ${LYELLOW}Correction : docker run --ulimit nofile=1024:2048${NC}"
         ((warnings++))
     fi
@@ -795,7 +806,7 @@ check_security() {
     local healthcheck=$(get_container_field "$cid" '{{.Config.Healthcheck}}' 2>/dev/null)
     if [[ "$healthcheck" == "<no value>" ]] || [[ "$healthcheck" == "null" ]] || [[ -z "$healthcheck" ]] || [[ "$healthcheck" == "&lt;no value&gt;" ]]; then
         echo -e "  ${LYELLOW}[!]${NC} ${LYELLOW}Healthcheck non défini${NC}"
-        echo -e "      ${DGRAY}├─${NC} ${LYELLOW}Pas de monitoring automatique de l'état du service${NC}"
+        echo -e "      ${DGRAY}├─${NC} Pas de monitoring automatique de l'état du service"
         echo -e "      ${DGRAY}└─${NC} ${LYELLOW}Correction : HEALTHCHECK CMD curl -f http://localhost/ || exit 1${NC}"
         ((warnings++))
     fi
@@ -810,7 +821,7 @@ check_security() {
     elif [[ "$log_driver" == "json-file" ]]; then
         local log_max_size=$(get_container_field "$cid" '{{.HostConfig.LogConfig.Config.max-size}}')
         if [[ -z "$log_max_size" ]] || [[ "$log_max_size" == "<no value>" ]]; then
-            echo -e "  ${LYELLOW}[!]${NC} ${LYELLOW}Logs sans limite de taille (risque de saturation disque)${NC}"
+            echo -e "  ${LYELLOW}[!]${NC} Logs sans limite de taille (risque de saturation disque)"
             echo -e "      ${DGRAY}└─${NC} ${LYELLOW}Correction : docker run --log-opt max-size=10m --log-opt max-file=3${NC}"
             ((warnings++))
         fi
@@ -819,17 +830,17 @@ check_security() {
     # 26. Restart policy (OWASP - BASSE pour résilience)
     local restart_policy=$(get_container_field "$cid" '{{.HostConfig.RestartPolicy.Name}}')
     if [[ "$restart_policy" == "no" ]] || [[ -z "$restart_policy" ]]; then
-        echo -e "  ${LBLUE}[i]${NC} ${LYELLOW}Restart policy non configuré (le conteneur ne redémarrera pas automatiquement)${NC}"
+        echo -e "  ${LBLUE}[i]${NC} Restart policy non configuré (le conteneur ne redémarrera pas automatiquement)"
     elif [[ "$restart_policy" == "always" ]]; then
-        echo -e "  ${LYELLOW}[!]${NC} ${LYELLOW}Restart policy 'always' (peut masquer des crashs répétés)${NC}"
-        echo -e "      ${DGRAY}└─${NC} ${LYELLOW}Considérer 'on-failure' avec un max-retry${NC}"
+        echo -e "  ${LYELLOW}[!]${NC} Restart policy 'always' (peut masquer des crashs répétés)"
+        echo -e "      ${DGRAY}└─${NC} Considérer 'on-failure' avec un max-retry"
     fi
     
     # 27. OOM Score adjustment (CIS - BASSE)
     local oom_score=$(get_container_field "$cid" '{{.HostConfig.OomScoreAdj}}')
     if [[ -n "$oom_score" ]] && [[ "$oom_score" != "<no value>" ]] && [[ "$oom_score" -lt -500 ]]; then
-        echo -e "  ${LYELLOW}[!]${NC} ${LYELLOW}OOM Score très bas ($oom_score) - Le conteneur sera protégé du OOM killer${NC}"
-        echo -e "      ${DGRAY}└─${NC} ${LYELLOW}Peut affecter la stabilité du système en cas de pression mémoire${NC}"
+        echo -e "  ${LYELLOW}[!]${NC} OOM Score très bas ($oom_score) - Le conteneur sera protégé du OOM killer"
+        echo -e "      ${DGRAY}└─${NC} Peut affecter la stabilité du système en cas de pression mémoire"
     fi
     
     # 28. Init process (OWASP - BASSE pour gestion des processus zombies)
@@ -854,22 +865,32 @@ check_security() {
 # FONCTIONS D'INSPECTION DÉTAILLÉE
 # =============================================================================
 
-# Fonction d'affichage des conteneurs (réutilisable)
+# Fonction d'affichage des conteneurs (simplifiée)
 display_containers() {
-    local filter="$1"  # "" pour running, "status=exited" pour stopped
-    local title_color="$2"  # LGREEN ou LYELLOW
+    local filter="$1"
+    local title_color="$2"
     local title="$3"
-    local status_width="$4"  # 20 ou 23
-    local ports_width="$5"  # 30 ou 20
+    local status_width="$4"
+    local ports_width="$5"
     
-    echo -e "${!title_color}[$( [[ "$title_color" == "LGREEN" ]] && echo "+" || echo "!" )]${NC} $title :"
+    # Symbole selon la couleur (simplifié)
+    local symbol="+"
+    [[ "$title_color" != "LGREEN" ]] && symbol="!"
     
-    local cmd_filter=""
-    [[ -n "$filter" ]] && cmd_filter="-f $filter"
+    echo -e "${!title_color}[$symbol]${NC} $title :"
     
-    local count=$($DOCKER_CMD ps $cmd_filter -q 2>/dev/null | wc -l)
+    # Construire la commande docker ps
+    local count
+    if [[ -n "$filter" ]]; then
+        count=$("$DOCKER_CMD" ps -f "$filter" -q 2>/dev/null | wc -l)
+    else
+        count=$("$DOCKER_CMD" ps -q 2>/dev/null | wc -l)
+    fi
+    
     if [[ $count -eq 0 ]]; then
-        echo -e "  ${LBLUE}[i]${NC} Aucun conteneur $( [[ -z "$filter" ]] && echo "en cours d'exécution" || echo "arrêté" )"
+        local msg="en cours d'exécution"
+        [[ -n "$filter" ]] && msg="arrêté"
+        echo -e "  ${LBLUE}[i]${NC} Aucun conteneur $msg"
         return
     fi
     
@@ -877,29 +898,36 @@ display_containers() {
     printf "  ${LYELLOW}%-12s %-18s %-30s %-${status_width}s %-9s %-7s %-${ports_width}s${NC}\n" "ID" "NOM" "IMAGE" "STATUS" "TYPE" "SOURCE" "PORTS"
     echo -e "  ${DGRAY}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
     
-    # Récupérer toutes les infos en un seul appel par conteneur
-    $DOCKER_CMD ps $cmd_filter --format "{{.ID}}|{{.Names}}|{{.Image}}|{{.Status}}|{{.Ports}}" 2>/dev/null | while IFS='|' read -r cid name image status ports; do
-        # Récupérer les infos supplémentaires nécessaires
-        local mounts_info=$(get_container_field "$cid" '{{range .Mounts}}1{{end}}|{{index .Config.Labels "com.docker.compose.project"}}')
-        local mounts_count=$(echo "$mounts_info" | cut -d'|' -f1 | wc -c)
-        local compose_project=$(echo "$mounts_info" | cut -d'|' -f2)
+    # Construire la commande format selon le filtre
+    local format_cmd
+    if [[ -n "$filter" ]]; then
+        format_cmd=("$DOCKER_CMD" ps -f "$filter" --format "{{.ID}}|{{.Names}}|{{.Image}}|{{.Status}}|{{.Ports}}")
+    else
+        format_cmd=("$DOCKER_CMD" ps --format "{{.ID}}|{{.Names}}|{{.Image}}|{{.Status}}|{{.Ports}}")
+    fi
+    
+    # Traiter chaque conteneur
+    "${format_cmd[@]}" 2>/dev/null | while IFS='|' read -r cid name image status ports; do
+        # Récupérer mounts et compose
+        local mounts_str=$(get_container_field "$cid" '{{range .Mounts}}1{{end}}')
+        local compose_project=$(get_container_field "$cid" '{{index .Config.Labels "com.docker.compose.project"}}')
         
-        # Déterminer le type
-        local type=$( [[ $mounts_count -gt 0 ]] && echo "Stateful" || echo "Stateless" )
+        # Déterminer type et source
+        local type="Stateless"
+        [[ ${#mounts_str} -gt 0 ]] && type="Stateful"
         
-        # Déterminer la source
         local source="manuel"
         [[ -n "$compose_project" && "$compose_project" != "<no value>" ]] && source="compose"
         
-        # Gérer les ports
-        [[ -z "$ports" ]] && ports="aucun"
+        # Nettoyer les codes ANSI du statut (Docker peut ajouter des couleurs)
+        status=$(strip_ansi "$status")
         
-        # Tronquer les champs
+        # Tronquer et formater
         cid="${cid:0:12}"
         name=$(truncate_text "$name" 18)
         image=$(truncate_text "$image" 30)
         status=$(truncate_text "$status" $status_width)
-        ports=$(truncate_text "$ports" $ports_width)
+        ports=$(truncate_text "${ports:-aucun}" $ports_width)
         
         # Colorer le statut
         local status_display="$status"
@@ -948,7 +976,7 @@ inspect_config_files() {
     local CMD=$(get_container_field "$cid" '{{json .Config.Cmd}}')
     local WORKDIR=$(get_container_field "$cid" '{{.Config.WorkingDir}}')
     
-    echo -e "  ${LBLUE}Exécution :${NC}"
+    echo -e "  ${LGREEN}[+]${NC} ${LGREEN}Exécution détectée${NC}"
     if [[ -n "$ENTRYPOINT" && "$ENTRYPOINT" != "null" ]]; then
         echo -e "      ${DGRAY}├─${NC} Entrypoint : $ENTRYPOINT"
     fi
@@ -994,18 +1022,16 @@ inspect_config_files() {
 inspect_ports() {
     local cid="$1"
     
-    echo -e "Ports exposés : (${LBLUE}Docker${NC} → ${LGREEN}Hôte${NC})"
+    echo "Ports exposés :"
     local PORTS=$(get_container_field "$cid" '{{range $p, $conf := .NetworkSettings.Ports}}{{if $conf}}{{$p}} -> {{(index $conf 0).HostPort}} {{end}}{{end}}')
     
     if [[ -z "$PORTS" ]]; then
         echo -e "  ${LBLUE}[i]${NC} Aucun port exposé sur l'hôte"
     else
-        get_container_field "$cid" '{{range $p, $conf := .NetworkSettings.Ports}}{{if $conf}}{{$p}} {{(index $conf 0).HostIp}}:{{(index $conf 0).HostPort}}{{println}}{{end}}{{end}}' | while IFS= read -r line; do
-            [[ -z "$line" ]] && continue
-            local port_container="${line%% *}"
-            local host_mapping="${line#* }"
+        echo -e "  ${DGRAY}├─${NC} ${LBLUE}Docker${NC} → ${LYELLOW}Hôte${NC}"
+        get_container_field "$cid" '{{range $p, $conf := .NetworkSettings.Ports}}{{if $conf}}{{$p}} {{(index $conf 0).HostIp}}:{{(index $conf 0).HostPort}}{{println}}{{end}}{{end}}' | while read -r port_container host_mapping; do
             [[ -z "$port_container" ]] && continue
-            echo -e "  ${DGRAY}├─${NC} ${LBLUE}$port_container${NC} → ${LGREEN}$host_mapping${NC}"
+            echo -e "  ${DGRAY}├─${NC} ${LBLUE}$port_container${NC} → ${LYELLOW}$host_mapping${NC}"
         done
     fi
 }
@@ -1027,7 +1053,11 @@ inspect_network() {
             [[ -z "$NET" ]] && continue
             ((i++))
             local DRIVER=$($DOCKER_CMD network inspect -f '{{.Driver}}' "$NET" 2>/dev/null || echo "inconnu")
-            local IP=$(get_container_field "$cid" "{{range .NetworkSettings.Networks}}{{if eq \"$NET\" \"$NET\"}}{{.IPAddress}}{{end}}{{end}}")
+            # Récupérer l'IP en utilisant index avec le nom du réseau
+            # Construire le template avec le nom du réseau
+            local ip_template="{{index .NetworkSettings.Networks \"$NET\" \"IPAddress\"}}"
+            local IP=$(get_container_field "$cid" "$ip_template")
+            [[ -z "$IP" ]] && IP="inconnu"
             if [[ $i -eq $NET_COUNT ]]; then
                 echo -e "  ${DGRAY}└─${NC} $NET :${LBLUE} $DRIVER - $IP${NC}"
             else
@@ -1049,10 +1079,9 @@ inspect_mounts() {
         echo -e "  ${LBLUE}[i]${NC} Aucun montage détecté"
         echo -e "  ${LBLUE}[i]${NC} Les données sont volatiles et seront perdues à la suppression du conteneur"
     else
-        echo -e "Type de conteneur : ${LGREEN}STATEFUL${NC} (avec persistance de données)"
-        echo -e "  ${LBLUE}[+]${NC} $MOUNTS_COUNT montage(s) détecté(s)"
+        echo -e "Type de conteneur : ${LYELLOW}STATEFUL${NC} (avec persistance de données)"
+        echo -e "  ${LGREEN}[+]${NC} $MOUNTS_COUNT montage(s) détecté(s)"
         echo
-
         local mount_num=0
         while IFS='|' read -r dest type source rw; do
             [[ -z "$dest" ]] && continue
@@ -1064,28 +1093,11 @@ inspect_mounts() {
             
             ((mount_num++))
             
-            # Détection de montage sensible
-            local IS_SENSITIVE=""
-            if echo "$dest" | grep -qE "^/(var/run/docker\.sock|var/lib/docker|etc|root|boot|dev|sys|proc)"; then
-                IS_SENSITIVE="${LRED}[x] "
-            fi
-            if echo "$dest" | grep -qE "\.env$|\.env\.|/\.env$" || echo "$source" | grep -qE "\.env$|\.env\.|/\.env$"; then
-                IS_SENSITIVE="${LRED}[x] "
-            fi
-            
             # Affichage
             if [[ $mount_num -eq $MOUNTS_COUNT ]]; then
-                if [[ -n "$IS_SENSITIVE" ]]; then
-                    printf "  ${DGRAY}└─${NC} ${IS_SENSITIVE}${LRED}%s${NC}\n" "$dest"
-                else
-                    printf "  ${DGRAY}└─${NC} %s\n" "$dest"
-                fi
+                printf "  ${DGRAY}└─${NC} %s\n" "$dest"
             else
-                if [[ -n "$IS_SENSITIVE" ]]; then
-                    printf "  ${DGRAY}├─${NC} ${IS_SENSITIVE}${LRED}%s${NC}\n" "$dest"
-                else
-                    printf "  ${DGRAY}├─${NC} %s\n" "$dest"
-                fi
+                printf "  ${DGRAY}├─${NC} %s\n" "$dest"
             fi
             echo -e "      ${DGRAY}├─${NC} Type : $type"
             if [[ "$rw" == "true" ]]; then
@@ -1093,11 +1105,7 @@ inspect_mounts() {
             else
                 echo -e "      ${DGRAY}├─${NC} Mode : ${LBLUE}read-only${NC}"
             fi
-            if [[ -n "$IS_SENSITIVE" ]]; then
-                printf "      ${DGRAY}└─${NC} Hôte : ${LRED}%s${NC}\n" "$source"
-            else
-                printf "      ${DGRAY}└─${NC} Hôte : %s\n" "$source"
-            fi
+            printf "      ${DGRAY}└─${NC} Hôte : %s\n" "$source"
             
             if [[ $mount_num -ne $MOUNTS_COUNT ]]; then
                 echo
@@ -1169,33 +1177,13 @@ inspect_env() {
     if [[ $ENV_COUNT -eq 0 ]]; then
         echo -e "  ${LBLUE}[i]${NC} Aucune variable d'environnement"
     else
-        local sensitive_count=0
         local line_num=0
         while IFS= read -r line; do
             [[ -z "$line" ]] && continue
             ((line_num++))
-            # Vérifier si la variable contient des données sensibles
-            if echo "$line" | grep -qiE "(password|passwd|pwd|pass|secret|token|api[_-]?key|auth|credential)="; then
-                if [[ $line_num -eq $ENV_COUNT ]]; then
-                    echo -e "  ${DGRAY}└─${NC} ${LRED}$line${NC}"
-                else
-                    echo -e "  ${DGRAY}├─${NC} ${LRED}$line${NC}"
-                fi
-                ((sensitive_count++))
-            else
-                if [[ $line_num -eq $ENV_COUNT ]]; then
-                    echo -e "  ${DGRAY}└─${NC} $line"
-                else
-                    echo -e "  ${DGRAY}├─${NC} $line"
-                fi
-            fi
+            echo -e "  ${DGRAY}├─${NC} $line"
         done <<< "$ALL_ENV"
         echo
-        if [[ $sensitive_count -gt 0 ]]; then
-            echo -e "  ${LRED}[x]${NC} Total : $ENV_COUNT variable(s) dont ${LRED}$sensitive_count sensible(s)${NC}"
-        else
-            echo -e "  ${LBLUE}[i]${NC} Total : $ENV_COUNT variable(s) d'environnement"
-        fi
     fi
 }
 
@@ -1206,14 +1194,15 @@ inspect_container() {
     local image=$(get_container_field "$cid" '{{.Config.Image}}')
     local status=$(get_container_field "$cid" '{{.State.Status}}')
     local uptime=$(get_container_field "$cid" '{{.State.StartedAt}}')
+    # Formater la date pour n'afficher que jusqu'aux minutes (2026-01-13T17:09:16.919855227Z -> 2026-01-13T17:09)
     uptime=$(echo "$uptime" | sed 's/:[0-9][0-9]\..*Z$//' | sed 's/Z$//')
     
     print_subsection "$name ($cid)"
-    echo "Image : $image"
+    echo -e "Image  : $image${NC}"
     # Colorer le statut selon son état
     local status_color="${LGREEN}"
     [[ "$status" == "exited" ]] && status_color="${LRED}"
-    echo -e "Status : ${status_color}$status${NC} (démarré : $uptime)"
+    echo -e "Statut : $status_color$status$NC (depuis : $uptime)"
     echo
     
     inspect_config_files "$cid"
@@ -1232,9 +1221,6 @@ inspect_container() {
     echo
     
     inspect_env "$cid"
-    echo
-    
-    check_security "$cid" "$name"
 }
 
 # =============================================================================
@@ -1291,7 +1277,7 @@ main() {
     echo -e "${LBLUE}║${NC}        ${LGREEN}██████╔╝╚██████╔╝╚██████╗██║  ██╗${LRED}██║ ╚████║╚██████╔╝ ╚████╔╝ ██║  ██║${NC}        ${LBLUE}║${NC}"
     echo -e "${LBLUE}║${NC}        ${LGREEN}╚═════╝  ╚═════╝  ╚═════╝╚═╝  ╚═╝${LRED}╚═╝  ╚═══╝ ╚═════╝   ╚═══╝  ╚═╝  ╚═╝${NC}        ${LBLUE}║${NC}"
     echo -e "${LBLUE}║${NC}                                                                                     ${LBLUE}║${NC}"
-    echo -e "${LBLUE}║${NC}                       ${LYELLOW}Inventaire et Audit de Sécurité Docker${NC}                        ${LBLUE}║${NC}"
+    echo -e "${LBLUE}║${NC}                                    ${LYELLOW}Inventaire Docker${NC}                                ${LBLUE}║${NC}"
     echo -e "${LBLUE}║${NC}                                                                                     ${LBLUE}║${NC}"
     echo -e "${LBLUE}╚═════════════════════════════════════════════════════════════════════════════════════╝${NC}"
     echo
@@ -1309,7 +1295,7 @@ main() {
     
     # Hostname
     local hostname=$(hostname)
-    echo -e "  ${DGRAY}┌─${NC} ${LBLUE}Hostname${NC} : ${LGREEN}$hostname${NC}"
+    echo -e "  ${DGRAY}├─${NC} ${LBLUE}Hostname${NC} : ${LGREEN}$hostname${NC}"
     
     # Adresse IP
     local ip_addr
@@ -1404,42 +1390,13 @@ main() {
     # Résumé final
     print_section "RÉSUMÉ"
     
-    # Recalculer les comptages pour le résumé (si pas déjà fait)
-    local running_count_summary=${#running_containers[@]}
-    local stopped_count_summary=${#stopped_containers[@]}
-    local total_count_summary=$((running_count_summary + stopped_count_summary))
-    
     # Comptage des conteneurs stateless vs stateful et compose vs manuel
     local stateless_count=0
     local stateful_count=0
     local compose_count=0
     local manual_count=0
     
-    # Compteurs de sécurité
-    local total_security_issues=0
-    local containers_with_root=0
-    local containers_privileged=0
-    local containers_with_docker_socket=0
-    local containers_with_host_pid=0
-    local containers_with_host_network=0
-    local containers_with_sensitive_mounts=0
-    local containers_with_sensitive_vars=0
-    local containers_secure=0
-    local containers_with_dangerous_caps=0
-    local containers_without_no_new_privs=0
-    local containers_with_dangerous_devices=0
-    local containers_with_cgroup_access=0
-    local containers_with_cloud_creds=0
-    local containers_with_seccomp_disabled=0
-    local containers_with_unlimited_resources=0
-    local containers_with_latest_tag=0
-    local containers_without_pids_limit=0
-    local containers_without_ulimits=0
-    local containers_without_healthcheck=0
-    local containers_with_no_logging=0
-    
-    # Analyser tous les conteneurs (running et stopped)
-    for cid in "${running_containers[@]}" "${stopped_containers[@]}"; do
+    for cid in "${running_containers[@]}"; do
         local mounts_count=$(get_container_field "$cid" '{{range .Mounts}}1{{end}}' | wc -c)
         local compose_project=$(get_container_field "$cid" '{{index .Config.Labels "com.docker.compose.project"}}')
         
@@ -1454,157 +1411,6 @@ main() {
             ((compose_count++))
         else
             ((manual_count++))
-        fi
-        
-        # Audit de sécurité du conteneur
-        local container_issues=0
-        local is_running=false
-        # Vérifier si le conteneur est en cours d'exécution
-        for running_cid in "${running_containers[@]}"; do
-            if [[ "$cid" == "$running_cid" ]]; then
-                is_running=true
-                break
-            fi
-        done
-        
-        # Vérification utilisateur root
-        local user=$(get_container_field "$cid" '{{.Config.User}}')
-        local uid_only="${user%%:*}"
-        if [[ -z "$user" || "$uid_only" == "0" || "$user" == "root" ]]; then
-            ((containers_with_root++))
-            ((container_issues++))
-        fi
-        
-        # Vérification mode privilégié
-        local privileged=$(get_container_field "$cid" '{{.HostConfig.Privileged}}')
-        if [[ "$privileged" == "true" ]]; then
-            ((containers_privileged++))
-            ((container_issues++))
-        fi
-        
-        # Vérification socket Docker
-        local volumes=$(get_container_field "$cid" '{{json .Mounts}}')
-        if echo "$volumes" | grep -q "/var/run/docker.sock"; then
-            ((containers_with_docker_socket++))
-            ((container_issues++))
-        fi
-        
-        # Vérification namespace PID
-        local pid_mode=$(get_container_field "$cid" '{{.HostConfig.PidMode}}')
-        if [[ "$pid_mode" == "host" ]]; then
-            ((containers_with_host_pid++))
-            ((container_issues++))
-        fi
-        
-        # Vérification mode réseau host
-        local network_mode=$(get_container_field "$cid" '{{.HostConfig.NetworkMode}}')
-        if [[ "$network_mode" == "host" ]]; then
-            ((containers_with_host_network++))
-            ((container_issues++))
-        fi
-        
-        # Vérification montages sensibles
-        if echo "$volumes" | grep -qE "/(etc|root|home|boot|dev|sys|proc)\"" || echo "$volumes" | grep -qE "\.env\"|\.env\.|/\.env\""; then
-            ((containers_with_sensitive_mounts++))
-            ((container_issues++))
-        fi
-        
-        # Vérification variables sensibles
-        local all_env=$(get_container_field "$cid" '{{range .Config.Env}}{{println .}}{{end}}')
-        local all_labels=$(get_container_field "$cid" '{{range $key, $value := .Config.Labels}}{{$key}}={{$value}}{{println}}{{end}}')
-        if detect_sensitive_data "$all_env" >/dev/null 2>&1 || detect_sensitive_data "$all_labels" >/dev/null 2>&1; then
-            ((containers_with_sensitive_vars++))
-            ((container_issues++))
-        fi
-        
-        # Vérification capabilities dangereuses
-        local cap_add=$(get_container_field "$cid" '{{.HostConfig.CapAdd}}')
-        if echo "$cap_add" | grep -qiE "SYS_ADMIN|SYS_PTRACE|SYS_MODULE|SYS_RAWIO|SYS_BOOT|ALL"; then
-            ((containers_with_dangerous_caps++))
-            ((container_issues++))
-        fi
-        
-        # Vérification no-new-privileges
-        local security_opt=$(get_container_field "$cid" '{{.HostConfig.SecurityOpt}}')
-        if ! echo "$security_opt" | grep -q "no-new-privileges:true"; then
-            ((containers_without_no_new_privs++))
-        fi
-        
-        # Vérification devices dangereux
-        local devices=$(get_container_field "$cid" '{{range .HostConfig.Devices}}{{.PathOnHost}}{{println}}{{end}}')
-        if echo "$devices" | grep -qE "/dev/(sd|hd|nvme|vd|xvd|kmsg|mem|kmem)"; then
-            ((containers_with_dangerous_devices++))
-            ((container_issues++))
-        fi
-        
-        # Vérification risque cgroups
-        if [[ "$privileged" == "true" ]] || \
-           echo "$cap_add" | grep -qiE "SYS_ADMIN|ALL" || \
-           (echo "$volumes" | grep -q '"/sys/fs/cgroup"' && echo "$volumes" | grep -q '"RW":true'); then
-            ((containers_with_cgroup_access++))
-            ((container_issues++))
-        fi
-        
-        # Vérification credentials cloud (uniquement pour conteneurs en cours d'exécution)
-        if [[ "$is_running" == "true" ]]; then
-            if $DOCKER_CMD exec "$cid" sh -c "test -d /root/.aws -o -d /root/.config/gcloud -o -d /root/.azure" 2>/dev/null; then
-                ((containers_with_cloud_creds++))
-                ((container_issues++))
-            fi
-        fi
-        
-        # Vérification Seccomp désactivé
-        if echo "$security_opt" | grep -q "seccomp=unconfined"; then
-            ((containers_with_seccomp_disabled++))
-            ((container_issues++))
-        fi
-        
-        # Vérification limites ressources
-        local mem_limit=$(get_container_field "$cid" '{{.HostConfig.Memory}}')
-        local cpu_quota=$(get_container_field "$cid" '{{.HostConfig.CpuQuota}}')
-        if [[ "$mem_limit" == "0" ]] || [[ "$cpu_quota" == "-1" ]] || [[ "$cpu_quota" == "0" ]]; then
-            ((containers_with_unlimited_resources++))
-            ((container_issues++))
-        fi
-        
-        # Vérification tag :latest
-        local image_full=$(get_container_field "$cid" '{{.Config.Image}}')
-        if echo "$image_full" | grep -qE ':latest$|^[^:]+$'; then
-            ((containers_with_latest_tag++))
-            ((container_issues++))
-        fi
-        
-        # Vérification PIDs limit
-        local pids_limit=$(get_container_field "$cid" '{{.HostConfig.PidsLimit}}')
-        if [[ "$pids_limit" == "0" ]] || [[ "$pids_limit" == "-1" ]] || [[ -z "$pids_limit" ]]; then
-            ((containers_without_pids_limit++))
-            ((container_issues++))
-        fi
-        
-        # Vérification Ulimits
-        local ulimits=$(get_container_field "$cid" '{{.HostConfig.Ulimits}}')
-        if [[ "$ulimits" == "[]" ]] || [[ "$ulimits" == "<no value>" ]] || [[ -z "$ulimits" ]]; then
-            ((containers_without_ulimits++))
-        fi
-        
-        # Vérification Healthcheck
-        local healthcheck=$(get_container_field "$cid" '{{.Config.Healthcheck}}' 2>/dev/null)
-        if [[ "$healthcheck" == "<no value>" ]] || [[ "$healthcheck" == "null" ]] || [[ -z "$healthcheck" ]]; then
-            ((containers_without_healthcheck++))
-        fi
-        
-        # Vérification Logging
-        local log_driver=$(get_container_field "$cid" '{{.HostConfig.LogConfig.Type}}')
-        if [[ "$log_driver" == "none" ]]; then
-            ((containers_with_no_logging++))
-            ((container_issues++))
-        fi
-        
-        # Comptage total des problèmes
-        total_security_issues=$((total_security_issues + container_issues))
-        
-        if [[ $container_issues -eq 0 ]]; then
-            ((containers_secure++))
         fi
     done
     
@@ -1628,16 +1434,16 @@ main() {
     
     # Affichage du résumé
     print_subsection "Vue d'ensemble"
-    echo -e "  ${LGREEN}[+]${NC} Conteneurs actifs  : ${LGREEN}$running_count_summary${NC}"
+    echo -e "  ${LGREEN}[+]${NC} Conteneurs actifs  : ${LGREEN}$running_count${NC}"
     
     # Afficher la liste des conteneurs actifs
-    if [[ $running_count_summary -gt 0 ]]; then
+    if [[ $running_count -gt 0 ]]; then
         local idx=0
         for cid in "${running_containers[@]}"; do
             local name=$(get_container_field "$cid" '{{.Name}}')
             name="${name#/}"  # Enlever le / au début si présent
             ((idx++))
-            if [[ $idx -eq $running_count_summary ]]; then
+            if [[ $idx -eq $running_count ]]; then
                 echo -e "      ${DGRAY}└─${NC} ${LGREEN}$name${NC}"
             else
                 echo -e "      ${DGRAY}├─${NC} ${LGREEN}$name${NC}"
@@ -1645,8 +1451,9 @@ main() {
         done
     fi
     
-    if [[ $stopped_count_summary -gt 0 ]]; then
-        echo -e "  ${LRED}[x]${NC} Conteneurs arrêtés : ${LRED}$stopped_count_summary${NC}"
+    local stopped_count=${#stopped_containers[@]}
+    if [[ $stopped_count -gt 0 ]]; then
+        echo -e "  ${LRED}[x]${NC} Conteneurs arrêtés : ${LRED}$stopped_count${NC}"
         
         # Afficher la liste des conteneurs arrêtés
         local idx=0
@@ -1654,7 +1461,7 @@ main() {
             local name=$(get_container_field "$cid" '{{.Name}}')
             name="${name#/}"  # Enlever le / au début si présent
             ((idx++))
-            if [[ $idx -eq $stopped_count_summary ]]; then
+            if [[ $idx -eq $stopped_count ]]; then
                 echo -e "      ${DGRAY}└─${NC} ${LRED}$name${NC}"
             else
                 echo -e "      ${DGRAY}├─${NC} ${LRED}$name${NC}"
@@ -1668,7 +1475,7 @@ main() {
     local total_containers_type=$((stateless_count + stateful_count))
     echo -e "  ${LGREEN}[+]${NC} Type de conteneur : $total_containers_type"
     echo -e "      ${DGRAY}├─${NC} ${LBLUE}Stateless${NC} : $stateless_count ${DGRAY}(applicatifs sans persistance)${NC}"
-    echo -e "      ${DGRAY}└─${NC} ${LGREEN}Stateful${NC} : $stateful_count ${DGRAY}(avec volumes de données ou montages)${NC}"
+    echo -e "      ${DGRAY}└─${NC} ${LYELLOW}Stateful${NC} : $stateful_count ${DGRAY}(avec volumes de données ou montages)${NC}"
     echo
     
     print_subsection "Par méthode de création"
@@ -1687,17 +1494,11 @@ main() {
     local active_volumes=$(echo "$system_df_output" | grep "^Local Volumes" | awk '{print $4}')
     local total_networks=$($DOCKER_CMD network ls -q 2>/dev/null | wc -l)
     
-    # Calculer les non utilisées (avec valeurs par défaut si vides)
-    [[ -z "$total_images" ]] && total_images=0
-    [[ -z "$active_images" ]] && active_images=0
-    [[ -z "$total_volumes" ]] && total_volumes=0
-    [[ -z "$active_volumes" ]] && active_volumes=0
-    [[ -z "$total_networks" ]] && total_networks=0
-    
+    # Calculer les non utilisées
     local unused_images=$((total_images - active_images))
     local unused_volumes=$((total_volumes - active_volumes))
     
-    # Images
+    # Images utilisées
     echo -e "  ${LGREEN}[+]${NC} Images : $total_images ${DGRAY}(${LGREEN}$active_images${DGRAY} utilisées, ${LYELLOW}$unused_images${DGRAY} non utilisées)${NC}"
     
     # Récupérer les images utilisées par les conteneurs
@@ -1709,6 +1510,7 @@ main() {
         for img in "${used_image_names[@]}"; do
             [[ -z "$img" ]] && continue
             ((idx++))
+            # Utiliser └─ seulement si c'est le dernier ET qu'il n'y a pas d'images non utilisées
             if [[ $idx -eq ${#used_image_names[@]} ]] && [[ "$has_unused" == "false" ]]; then
                 echo -e "      ${DGRAY}└─${NC} ${LGREEN}$img${NC}"
             else
@@ -1717,28 +1519,30 @@ main() {
         done
     fi
     
-    # Images non utilisées
+    # Images non utilisées (utiliser docker system df -v pour identifier celles avec 0 conteneurs)
     if [[ $unused_images -gt 0 ]]; then
         local unused_image_list
         mapfile -t unused_image_list < <($DOCKER_CMD system df -v 2>/dev/null | awk '/^Images space usage:/{flag=1; next} /^Containers space usage:/{flag=0} flag && NF>0 && $NF=="0" {print $1":"$2}' | grep -v '^$')
+        
         if [[ ${#unused_image_list[@]} -gt 0 ]]; then
             local idx=0
             for img_name in "${unused_image_list[@]}"; do
                 [[ -z "$img_name" ]] && continue
                 ((idx++))
+                # Si c'est le dernier élément de toute la liste (utilisées + non utilisées), utiliser └─
                 if [[ $idx -eq ${#unused_image_list[@]} ]]; then
-                    echo -e "      ${DGRAY}└─${NC} ${LYELLOW}[!] $img_name${NC}"
+                    echo -e "      ${DGRAY}└─${NC} ${LYELLOW}$img_name${NC}"
                 else
-                    echo -e "      ${DGRAY}├─${NC} ${LYELLOW}[!] $img_name${NC}"
+                    echo -e "      ${DGRAY}├─${NC} ${LYELLOW}$img_name${NC}"
                 fi
             done
         fi
     fi
     
-    # Volumes
+    # Volumes montés
     echo -e "  ${LGREEN}[+]${NC} Volumes : $total_volumes ${DGRAY}(${LGREEN}$active_volumes${DGRAY} montés, ${LYELLOW}$unused_volumes${DGRAY} non montés)${NC}"
     
-    # Récupérer les volumes montés
+    # Récupérer les volumes montés (via inspect de tous les conteneurs)
     local used_volumes=()
     for cid in "${running_containers[@]}" "${stopped_containers[@]}"; do
         local vol_names=$(get_container_field "$cid" '{{range .Mounts}}{{if eq .Type "volume"}}{{.Name}}{{println}}{{end}}{{end}}' 2>/dev/null)
@@ -1756,6 +1560,7 @@ main() {
         for vol in "${used_volumes[@]}"; do
             [[ -z "$vol" ]] && continue
             ((idx++))
+            # Utiliser └─ seulement si c'est le dernier ET qu'il n'y a pas de volumes non montés
             if [[ $idx -eq ${#used_volumes[@]} ]] && [[ "$has_unused_vol" == "false" ]]; then
                 echo -e "      ${DGRAY}└─${NC} ${LGREEN}$vol${NC}"
             else
@@ -1779,20 +1584,21 @@ main() {
             done
             [[ "$is_used" == "false" ]] && unused_volume_list+=("$vol")
         done
+        
         if [[ ${#unused_volume_list[@]} -gt 0 ]]; then
             local idx=0
             for vol in "${unused_volume_list[@]}"; do
                 ((idx++))
                 if [[ $idx -eq ${#unused_volume_list[@]} ]]; then
-                    echo -e "      ${DGRAY}└─${NC} ${LYELLOW}[!] $vol${NC}"
+                    echo -e "      ${DGRAY}└─${NC} ${LYELLOW}$vol${NC}"
                 else
-                    echo -e "      ${DGRAY}├─${NC} ${LYELLOW}[!] $vol${NC}"
+                    echo -e "      ${DGRAY}├─${NC} ${LYELLOW}$vol${NC}"
                 fi
             done
         fi
     fi
     
-    # Réseaux utilisés
+    # Réseaux utilisés (via inspect de tous les conteneurs)
     local used_networks=()
     for cid in "${running_containers[@]}" "${stopped_containers[@]}"; do
         local net_names=$(get_container_field "$cid" '{{range $net, $conf := .NetworkSettings.Networks}}{{$net}}{{println}}{{end}}' 2>/dev/null)
@@ -1811,11 +1617,10 @@ main() {
     
     if [[ ${#used_networks[@]} -gt 0 ]] && [[ -n "${used_networks[0]}" ]]; then
         local idx=0
-        local has_unused_net=$([[ $unused_network_count -gt 0 ]] && echo "true" || echo "false")
         for net in "${used_networks[@]}"; do
             [[ -z "$net" ]] && continue
             ((idx++))
-            if [[ $idx -eq ${#used_networks[@]} ]] && [[ "$has_unused_net" == "false" ]]; then
+            if [[ $idx -eq ${#used_networks[@]} ]]; then
                 echo -e "      ${DGRAY}└─${NC} ${LGREEN}$net${NC}"
             else
                 echo -e "      ${DGRAY}├─${NC} ${LGREEN}$net${NC}"
@@ -1829,6 +1634,8 @@ main() {
         mapfile -t all_networks < <($DOCKER_CMD network ls --format '{{.Name}}' 2>/dev/null)
         local unused_network_list=()
         for net in "${all_networks[@]}"; do
+            # Ignorer les réseaux système par défaut
+            [[ "$net" == "bridge" ]] || [[ "$net" == "host" ]] || [[ "$net" == "none" ]] && continue
             local is_used=false
             for used_net in "${used_networks[@]}"; do
                 if [[ "$net" == "$used_net" ]]; then
@@ -1838,14 +1645,15 @@ main() {
             done
             [[ "$is_used" == "false" ]] && unused_network_list+=("$net")
         done
+        
         if [[ ${#unused_network_list[@]} -gt 0 ]]; then
             local idx=0
             for net in "${unused_network_list[@]}"; do
                 ((idx++))
                 if [[ $idx -eq ${#unused_network_list[@]} ]]; then
-                    echo -e "      ${DGRAY}└─${NC} ${LYELLOW}[!] $net${NC}"
+                    echo -e "      ${DGRAY}└─${NC} ${LYELLOW}$net${NC}"
                 else
-                    echo -e "      ${DGRAY}├─${NC} ${LYELLOW}[!] $net${NC}"
+                    echo -e "      ${DGRAY}├─${NC} ${LYELLOW}$net${NC}"
                 fi
             done
         fi
@@ -1853,199 +1661,80 @@ main() {
     
     echo
     
-    # Affichage de l'audit de sécurité
-    if [[ $total_count_summary -gt 0 ]]; then
-        print_subsection "Audit de Sécurité"
-        echo -e "  ${LGREEN}[+]${NC} Conteneurs analysés : $total_count_summary"
-        echo -e "      ${DGRAY}├─${NC} Conteneurs sécurisés : $containers_secure"
-        echo -e "      ${DGRAY}└─${NC} Conteneurs avec alertes : $((total_count_summary - containers_secure))"
-        echo
-        
-        if [[ $total_security_issues -gt 0 ]]; then
-            print_subsection "Problèmes détectés"
-            
-            [[ $containers_with_root -gt 0 ]] && echo -e "  ${LRED}[x]${NC} ${LRED}$containers_with_root${NC} conteneur(s) exécuté(s) en root"
-            [[ $containers_privileged -gt 0 ]] && echo -e "  ${LRED}[x]${NC} ${LRED}$containers_privileged${NC} conteneur(s) en mode privilégié"
-            [[ $containers_with_docker_socket -gt 0 ]] && echo -e "  ${LRED}[x]${NC} ${LRED}$containers_with_docker_socket${NC} conteneur(s) avec accès au socket Docker ${LRED}[CRITIQUE]${NC}"
-            [[ $containers_with_host_pid -gt 0 ]] && echo -e "  ${ORANGE}[!]${NC} ${ORANGE}$containers_with_host_pid${NC} conteneur(s) avec namespace PID host ${ORANGE}[HAUTE]${NC}"
-            [[ $containers_with_host_network -gt 0 ]] && echo -e "  ${ORANGE}[!]${NC} ${ORANGE}$containers_with_host_network${NC} conteneur(s) en mode réseau host ${ORANGE}[HAUTE]${NC}"
-            [[ $containers_with_sensitive_mounts -gt 0 ]] && echo -e "  ${LRED}[x]${NC} ${LRED}$containers_with_sensitive_mounts${NC} conteneur(s) avec montages système sensibles"
-            [[ $containers_with_sensitive_vars -gt 0 ]] && echo -e "  ${ORANGE}[!]${NC} ${ORANGE}$containers_with_sensitive_vars${NC} conteneur(s) avec variables sensibles exposées ${ORANGE}[HAUTE]${NC}"
-            [[ $containers_with_dangerous_caps -gt 0 ]] && echo -e "  ${LRED}[x]${NC} ${LRED}$containers_with_dangerous_caps${NC} conteneur(s) avec capabilities DANGEREUSES ${LRED}[CAP_SYS_ADMIN, etc.]${NC}"
-            [[ $containers_without_no_new_privs -gt 0 ]] && echo -e "  ${LYELLOW}[!]${NC} ${LYELLOW}$containers_without_no_new_privs${NC} conteneur(s) sans flag no-new-privileges ${LYELLOW}[SUID/SGID]${NC}"
-            [[ $containers_with_dangerous_devices -gt 0 ]] && echo -e "  ${LRED}[x]${NC} ${LRED}$containers_with_dangerous_devices${NC} conteneur(s) avec devices CRITIQUES exposés ${LRED}[/dev/sda, /dev/mem]${NC}"
-            [[ $containers_with_cgroup_access -gt 0 ]] && echo -e "  ${LRED}[x]${NC} ${LRED}$containers_with_cgroup_access${NC} conteneur(s) avec config risque cgroups ${LRED}[CONTAINER ESCAPE]${NC}"
-            [[ $containers_with_cloud_creds -gt 0 ]] && echo -e "  ${LRED}[x]${NC} ${LRED}$containers_with_cloud_creds${NC} conteneur(s) avec credentials cloud détectés ${LRED}[AWS/GCP/Azure]${NC}"
-            [[ $containers_with_seccomp_disabled -gt 0 ]] && echo -e "  ${LRED}[x]${NC} ${LRED}$containers_with_seccomp_disabled${NC} conteneur(s) avec Seccomp DÉSACTIVÉ ${LRED}[ALL SYSCALLS]${NC}"
-            [[ $containers_with_unlimited_resources -gt 0 ]] && echo -e "  ${ORANGE}[!]${NC} ${ORANGE}$containers_with_unlimited_resources${NC} conteneur(s) avec ressources ILLIMITÉES ${ORANGE}[DoS RISK]${NC}"
-            [[ $containers_with_latest_tag -gt 0 ]] && echo -e "  ${ORANGE}[!]${NC} ${ORANGE}$containers_with_latest_tag${NC} conteneur(s) avec tag :latest ${ORANGE}[NON-DETERMINISTIC]${NC}"
-            [[ $containers_without_pids_limit -gt 0 ]] && echo -e "  ${ORANGE}[!]${NC} ${ORANGE}$containers_without_pids_limit${NC} conteneur(s) sans PIDs limit ${ORANGE}[FORK BOMB]${NC}"
-            [[ $containers_without_ulimits -gt 0 ]] && echo -e "  ${LYELLOW}[!]${NC} ${LYELLOW}$containers_without_ulimits${NC} conteneur(s) sans ulimits configurés"
-            [[ $containers_without_healthcheck -gt 0 ]] && echo -e "  ${LYELLOW}[!]${NC} ${LYELLOW}$containers_without_healthcheck${NC} conteneur(s) sans healthcheck"
-            [[ $containers_with_no_logging -gt 0 ]] && echo -e "  ${ORANGE}[!]${NC} ${ORANGE}$containers_with_no_logging${NC} conteneur(s) avec logging DÉSACTIVÉ ${ORANGE}[NO AUDIT]${NC}"
-            
-            echo
-            echo -e "  ${LRED}Total : $total_security_issues alerte(s) de sécurité${NC}"
-            echo
-            
-            # Section recommandations de mitigation
-            print_section "RECOMMANDATIONS DE SÉCURITÉ"
-            echo
-            
-            if [[ $containers_privileged -gt 0 ]] || [[ $containers_with_docker_socket -gt 0 ]] || [[ $containers_with_dangerous_caps -gt 0 ]]; then
-                echo -e "  ${LRED}[CRITIQUE]${NC} Vecteurs d'échappement de conteneur détectés :"
-                echo -e "      ${DGRAY}├─${NC} ${LYELLOW}docker run --security-opt=no-new-privileges${NC}"
-                echo -e "      ${DGRAY}├─${NC} ${LYELLOW}docker run --cap-drop=ALL --cap-add=<MINIMAL_CAPS>${NC}"
-                echo -e "      ${DGRAY}├─${NC} ${LYELLOW}docker run --read-only${NC} (système de fichiers racine en lecture seule)"
-                echo -e "      ${DGRAY}└─${NC} ${LYELLOW}Éviter --privileged et le montage du socket Docker${NC}"
-                echo
-            fi
-            
-            if [[ $containers_with_docker_socket -gt 0 ]]; then
-                echo -e "  ${LRED}[CRITIQUE]${NC} Socket Docker/Podman monté - Vecteurs d'échappement de conteneur détectés :"
-                echo -e "      ${DGRAY}├─${NC} ${LRED}Le mode RO n'est PAS une protection réelle contre l'API Docker/Podman${NC}"
-                echo -e "      ${DGRAY}├─${NC} ${LRED}Les permissions Unix ro ne bloquent pas les requêtes HTTP (POST/DELETE/PUT)${NC}"
-                echo -e "      ${DGRAY}├─${NC} ${LRED}Accès au socket = contrôle équivalent à root Docker/Podman${NC}"
-                echo -e "      ${DGRAY}├─${NC} ${LYELLOW}Solution recommandée : NE PAS monter le socket${NC}"
-                echo -e "      ${DGRAY}├─${NC} ${LYELLOW}Alternative : Utiliser un proxy API sécurisé qui limite les opérations autorisées${NC}"
-                echo -e "      ${DGRAY}├─${NC} ${LYELLOW}Exemples de proxies : Docker Socket Proxy, Traefik avec filtres API${NC}"
-                echo -e "      ${DGRAY}└─${NC} ${LYELLOW}Si nécessaire : User namespaces, AppArmor/SELinux, runtimes isolés (gVisor, Kata)${NC}"
-                echo
-            fi
-            
-            if [[ $containers_with_root -gt 0 ]]; then
-                echo -e "  ${LRED}[CRITIQUE]${NC} Conteneurs exécutés en root :"
-                echo -e "      ${DGRAY}├─${NC} ${LRED}Risque d'escalade de privilèges si échappement de conteneur${NC}"
-                echo -e "      ${DGRAY}├─${NC} ${LYELLOW}Ajouter 'USER <non-root>' dans le Dockerfile${NC}"
-                echo -e "      ${DGRAY}└─${NC} ${LYELLOW}docker run --user <uid>:<gid>${NC}"
-                echo
-            fi
-            
-            if [[ $containers_with_sensitive_vars -gt 0 ]]; then
-                echo -e "  ${ORANGE}[HAUTE]${NC} Variables sensibles exposées :"
-                echo -e "      ${DGRAY}├─${NC} ${LYELLOW}Risque d'exposition de credentials (passwords, tokens, API keys)${NC}"
-                echo -e "      ${DGRAY}├─${NC} ${LYELLOW}Utiliser des secrets managers (Docker secrets, Vault, AWS Secrets Manager)${NC}"
-                echo -e "      ${DGRAY}└─${NC} ${LYELLOW}docker run --secret ou variables d'environnement via fichiers montés${NC}"
-                echo
-            fi
-            
-            if [[ $containers_without_no_new_privs -gt 0 ]]; then
-                echo -e "  ${LYELLOW}[MOYENNE]${NC} Flag no-new-privileges absent :"
-                echo -e "      ${DGRAY}├─${NC} ${LYELLOW}Risque d'escalade via binaires SUID/SGID${NC}"
-                echo -e "      ${DGRAY}└─${NC} ${LYELLOW}docker run --security-opt=no-new-privileges${NC}"
-                echo
-            fi
-            
-            if [[ $containers_without_ulimits -gt 0 ]]; then
-                echo -e "  ${LYELLOW}[MOYENNE]${NC} Ulimits non configurés :"
-                echo -e "      ${DGRAY}├─${NC} ${LYELLOW}Risque d'épuisement des file descriptors/processus${NC}"
-                echo -e "      ${DGRAY}└─${NC} ${LYELLOW}docker run --ulimit nofile=1024:2048${NC}"
-                echo
-            fi
-            
-            if [[ $containers_with_seccomp_disabled -gt 0 ]]; then
-                echo -e "  ${LRED}[CRITIQUE]${NC} Seccomp désactivé :"
-                echo -e "      ${DGRAY}├─${NC} ${LRED}Activer un profil Seccomp personnalisé${NC}"
-                echo -e "      ${DGRAY}└─${NC} ${LYELLOW}docker run --security-opt seccomp=/path/to/profile.json${NC}"
-                echo
-            fi
-            
-            if [[ $containers_with_unlimited_resources -gt 0 ]]; then
-                echo -e "  ${LRED}[CRITIQUE]${NC} Ressources illimitées (DoS) :"
-                echo -e "      ${DGRAY}├─${NC} ${LYELLOW}Risque de déni de service par épuisement RAM/CPU${NC}"
-                echo -e "      ${DGRAY}├─${NC} ${LYELLOW}docker run --memory=2g --memory-swap=2g${NC}"
-                echo -e "      ${DGRAY}└─${NC} ${LYELLOW}docker run --cpus=2 --cpu-shares=1024${NC}"
-                echo
-            fi
-            
-            if [[ $containers_with_latest_tag -gt 0 ]]; then
-                echo -e "  ${ORANGE}[HAUTE]${NC} Tag :latest utilisé :"
-                echo -e "      ${DGRAY}├─${NC} ${LYELLOW}Déploiements non reproductibles, versions non traçables${NC}"
-                echo -e "      ${DGRAY}├─${NC} Utiliser des tags versionnés spécifiques"
-                echo -e "      ${DGRAY}└─${NC} ${LYELLOW}Exemple : nginx:1.21.6 au lieu de nginx:latest${NC}"
-                echo
-            fi
-            
-            if [[ $containers_without_pids_limit -gt 0 ]]; then
-                echo -e "  ${ORANGE}[HAUTE]${NC} PIDs limit non défini (fork bomb) :"
-                echo -e "      ${DGRAY}├─${NC} ${LYELLOW}Risque de fork bomb paralysant le système${NC}"
-                echo -e "      ${DGRAY}└─${NC} ${LYELLOW}docker run --pids-limit=100${NC}"
-                echo
-            fi
-            
-            if [[ $containers_with_no_logging -gt 0 ]]; then
-                echo -e "  ${ORANGE}[HAUTE]${NC} Logging désactivé :"
-                echo -e "      ${DGRAY}├─${NC} ${LYELLOW}Aucune traçabilité en cas d'incident${NC}"
-                echo -e "      ${DGRAY}├─${NC} ${LYELLOW}docker run --log-driver=json-file${NC}"
-                echo -e "      ${DGRAY}└─${NC} ${LYELLOW}docker run --log-opt max-size=10m --log-opt max-file=3${NC}"
-                echo
-            fi
-            
-            if [[ $containers_with_cloud_creds -gt 0 ]]; then
-                echo -e "  ${LRED}[CRITIQUE]${NC} Credentials cloud exposés :"
-                echo -e "      ${DGRAY}├─${NC} Utiliser les IAM Roles (AWS) ou Workload Identity (GCP)"
-                echo -e "      ${DGRAY}├─${NC} Utiliser des secrets managers (Vault, AWS Secrets Manager)"
-                echo -e "      ${DGRAY}└─${NC} ${LYELLOW}NE JAMAIS monter ~/.aws ou ~/.config/gcloud${NC}"
-                echo
-            fi
-            
-            if [[ $containers_with_cgroup_access -gt 0 ]]; then
-                echo -e "  ${LRED}[CRITIQUE]${NC} Configuration à risque pour manipulation cgroups :"
-                echo -e "      ${DGRAY}├─${NC} ${LRED}Risque d'échappement de conteneur via release_agent (CVE-2022-0492)${NC}"
-                echo -e "      ${DGRAY}├─${NC} ${LYELLOW}Supprimer CAP_SYS_ADMIN : docker run --cap-drop=SYS_ADMIN${NC}"
-                echo -e "      ${DGRAY}├─${NC} ${LYELLOW}Activer AppArmor/SELinux : docker run --security-opt apparmor=docker-default${NC}"
-                echo -e "      ${DGRAY}└─${NC} ${LYELLOW}Ne PAS utiliser --privileged${NC}"
-                echo
-            fi
-            
-            echo -e "  ${LBLUE}[INFO]${NC} Ressources utiles :"
-            echo -e "      ${DGRAY}├─${NC} ANSSI - Recommandations Docker : https://cyber.gouv.fr/publications/recommandations-de-securite-relatives-au-deploiement-de-conteneurs-docker"
-            echo -e "      ${DGRAY}├─${NC} OWASP Docker Security : https://cheatsheetseries.owasp.org/cheatsheets/Docker_Security_Cheat_Sheet.html"
-            echo -e "      ${DGRAY}└─${NC} Docker Security Best Practices : https://docs.docker.com/engine/security/"
-            echo
-        else
-            echo -e "  ${LGREEN}[+]${NC} ${LGREEN}Aucun problème de sécurité majeur détecté${NC}"
-        fi
-    fi
-    
     # Section Recommandations d'optimisation
+    # stopped_count déjà défini plus haut
     local system_df_output=$($DOCKER_CMD system df 2>/dev/null)
-    local total_images_opt=$(echo "$system_df_output" | grep "^Images" | awk '{print $2}')
-    local active_images_opt=$(echo "$system_df_output" | grep "^Images" | awk '{print $3}')
-    local total_volumes_opt=$(echo "$system_df_output" | grep "^Local Volumes" | awk '{print $3}')
-    local active_volumes_opt=$(echo "$system_df_output" | grep "^Local Volumes" | awk '{print $4}')
+    # Extraction de la colonne RECLAIMABLE
+    # Format: TYPE TOTAL ACTIVE SIZE RECLAIMABLE [PERCENTAGE]
+    # Pour "Local Volumes" (2 mots), les colonnes sont: Local Volumes TOTAL ACTIVE SIZE RECLAIMABLE PERCENTAGE
+    # On extrait la colonne qui contient une taille (GB/MB/KB/B) et qui est la dernière avant le pourcentage
+    # Méthode: prendre toutes les colonnes de taille, la dernière est RECLAIMABLE
+    local images_reclaimable=$(echo "$system_df_output" | grep "^Images" | awk '{
+        for(i=NF; i>=1; i--) {
+            if($i ~ /^[0-9.]+(GB|MB|KB|B)$/) {
+                print $i
+                break
+            }
+        }
+    }' || echo "")
+    local containers_reclaimable=$(echo "$system_df_output" | grep "^Containers" | awk '{
+        for(i=NF; i>=1; i--) {
+            if($i ~ /^[0-9.]+(GB|MB|KB|B)$/) {
+                print $i
+                break
+            }
+        }
+    }' || echo "")
+    local volumes_reclaimable=$(echo "$system_df_output" | grep "^Local Volumes" | awk '{
+        for(i=NF; i>=1; i--) {
+            if($i ~ /^[0-9.]+(GB|MB|KB|B)$/) {
+                print $i
+                break
+            }
+        }
+    }' || echo "")
+    local build_cache_reclaimable=$(echo "$system_df_output" | grep "^Build Cache" | awk '{
+        for(i=NF; i>=1; i--) {
+            if($i ~ /^[0-9.]+(GB|MB|KB|B)$/) {
+                print $i
+                break
+            }
+        }
+    }' || echo "")
     
-    # Calculer les non utilisées (avec valeurs par défaut si vides)
-    [[ -z "$total_images_opt" ]] && total_images_opt=0
-    [[ -z "$active_images_opt" ]] && active_images_opt=0
-    [[ -z "$total_volumes_opt" ]] && total_volumes_opt=0
-    [[ -z "$active_volumes_opt" ]] && active_volumes_opt=0
+    # Vérifier si on doit afficher les recommandations
+    # Afficher si : images récupérables, volumes non utilisés, conteneurs arrêtés, ou cache de build
+    local has_optimizations=false
+    [[ -n "$images_reclaimable" ]] && [[ "$images_reclaimable" != "0B" ]] && [[ "$images_reclaimable" != "0" ]] && has_optimizations=true
+    [[ $unused_volumes -gt 0 ]] && has_optimizations=true
+    [[ $stopped_count -gt 0 ]] && has_optimizations=true
+    [[ -n "$build_cache_reclaimable" ]] && [[ "$build_cache_reclaimable" != "0B" ]] && [[ "$build_cache_reclaimable" != "0" ]] && has_optimizations=true
     
-    local unused_images_opt=$((total_images_opt - active_images_opt))
-    local unused_volumes_opt=$((total_volumes_opt - active_volumes_opt))
-    
-    local images_reclaimable=$(echo "$system_df_output" | grep "^Images" | awk '{print $5}' || echo "")
-    local containers_reclaimable=$(echo "$system_df_output" | grep "^Containers" | awk '{print $5}' || echo "")
-    local volumes_reclaimable=$(echo "$system_df_output" | grep "^Local Volumes" | awk '{print $5}' || echo "")
-    local build_cache_reclaimable=$(echo "$system_df_output" | grep "^Build Cache" | awk '{print $5}' || echo "")
-    
-    if [[ $unused_images_opt -gt 0 ]] || [[ $unused_volumes_opt -gt 0 ]] || [[ $stopped_count_summary -gt 0 ]]; then
+    if [[ "$has_optimizations" == "true" ]]; then
         print_section "RECOMMANDATIONS D'OPTIMISATION"
         echo
         
         echo -e "  ${LBLUE}[OPTIMISATION]${NC} Libération d'espace disque :"
         
-        if [[ $unused_images_opt -gt 0 ]] && [[ -n "$images_reclaimable" ]]; then
-            echo -e "      ${DGRAY}├─${NC} ${LYELLOW}docker image prune -a${NC} ${DGRAY}(${LYELLOW}$unused_images_opt${DGRAY} image(s) · ${LGREEN}~$images_reclaimable${DGRAY} récupérables)${NC}"
+        # Afficher la recommandation pour les images si espace récupérable significatif
+        if [[ -n "$images_reclaimable" ]] && [[ "$images_reclaimable" != "0B" ]] && [[ "$images_reclaimable" != "0" ]]; then
+            local image_count_text=""
+            if [[ $unused_images -gt 0 ]]; then
+                image_count_text="${LYELLOW}$unused_images${DGRAY} image(s) · "
+            fi
+            echo -e "      ${DGRAY}├─${NC} ${LYELLOW}docker image prune -a${NC} ${DGRAY}(${image_count_text}${LGREEN}~$images_reclaimable${DGRAY} récupérables)${NC}"
         fi
         
-        if [[ $unused_volumes_opt -gt 0 ]] && [[ -n "$volumes_reclaimable" ]]; then
-            echo -e "      ${DGRAY}├─${NC} ${LYELLOW}docker volume prune${NC} ${DGRAY}(${LYELLOW}$unused_volumes_opt${DGRAY} volume(s) · ${LGREEN}~$volumes_reclaimable${DGRAY} récupérables)${NC}"
+        if [[ $unused_volumes -gt 0 ]]; then
+            if [[ -n "$volumes_reclaimable" ]] && [[ "$volumes_reclaimable" != "0B" ]] && [[ "$volumes_reclaimable" != "0" ]]; then
+                echo -e "      ${DGRAY}├─${NC} ${LYELLOW}docker volume prune${NC} ${DGRAY}(${LYELLOW}$unused_volumes${DGRAY} volume(s) · ${LGREEN}~$volumes_reclaimable${DGRAY} récupérables)${NC}"
+            else
+                echo -e "      ${DGRAY}├─${NC} ${LYELLOW}docker volume prune${NC} ${DGRAY}(${LYELLOW}$unused_volumes${DGRAY} volume(s) non utilisés)${NC}"
+            fi
         fi
         
-        
-        if [[ $stopped_count_summary -gt 0 ]] && [[ -n "$containers_reclaimable" ]]; then
-            echo -e "      ${DGRAY}├─${NC} ${LYELLOW}docker container prune${NC} ${DGRAY}(${LYELLOW}$stopped_count_summary${DGRAY} conteneur(s) · ${LGREEN}~$containers_reclaimable${DGRAY} récupérables)${NC}"
+        if [[ $stopped_count -gt 0 ]] && [[ -n "$containers_reclaimable" ]]; then
+            echo -e "      ${DGRAY}├─${NC} ${LYELLOW}docker container prune${NC} ${DGRAY}(${LYELLOW}$stopped_count${DGRAY} conteneur(s) · ${LGREEN}~$containers_reclaimable${DGRAY} récupérables)${NC}"
         fi
         
         if [[ -n "$build_cache_reclaimable" ]] && [[ "$build_cache_reclaimable" != "0B" ]] && [[ "$build_cache_reclaimable" != "0" ]]; then
