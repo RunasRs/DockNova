@@ -169,6 +169,15 @@ truncate_text() {
     fi
 }
 
+# Fonction pour supprimer les codes ANSI d'une chaîne
+strip_ansi() {
+    local text="$1"
+    # Supprimer les codes ANSI : séquences ESC[...m (tous formats)
+    # Gère les séquences littérales \033[...m (comme retournées par Docker)
+    # et les vraies séquences d'échappement \x1b[...m
+    echo "$text" | sed -E 's/\\033\[[0-9;]*m//g' | sed -E 's/\x1b\[[0-9;]*m//g' | sed -E 's/\e\[[0-9;]*m//g'
+}
+
 print_section() {
     local title="$1"
     local total_width=87
@@ -769,7 +778,7 @@ check_security() {
     local image_full=$(get_container_field "$cid" '{{.Config.Image}}')
     if echo "$image_full" | grep -qE ':latest$|^[^:]+$'; then
         echo -e "  ${LYELLOW}[!]${NC} ${LYELLOW}Image avec tag :latest ou sans tag${NC}"
-        echo -e "      ${DGRAY}├─${NC} ${LYELLOW}Risque : Déploiements non-déterministes, versions non traçables${NC}"
+        echo -e "      ${DGRAY}├─${NC} ${LYELLOW}Risque : tag non traçable${NC}"
         echo -e "      ${DGRAY}├─${NC} Image : ${LYELLOW}$image_full${NC}"
         echo -e "      ${DGRAY}└─${NC} ${LYELLOW}Correction : Utiliser des tags versionnés (ex: nginx:1.21.6)${NC}"
         ((warnings++))
@@ -909,6 +918,9 @@ display_containers() {
         
         local source="manuel"
         [[ -n "$compose_project" && "$compose_project" != "<no value>" ]] && source="compose"
+        
+        # Nettoyer les codes ANSI du statut (Docker peut ajouter des couleurs)
+        status=$(strip_ansi "$status")
         
         # Tronquer et formater
         cid="${cid:0:12}"
@@ -1713,8 +1725,12 @@ main() {
             echo -e "      ${DGRAY}├─${NC} ${LYELLOW}docker image prune -a${NC} ${DGRAY}(${image_count_text}${LGREEN}~$images_reclaimable${DGRAY} récupérables)${NC}"
         fi
         
-        if [[ $unused_volumes -gt 0 ]] && [[ -n "$volumes_reclaimable" ]]; then
-            echo -e "      ${DGRAY}├─${NC} ${LYELLOW}docker volume prune${NC} ${DGRAY}(${LYELLOW}$unused_volumes${DGRAY} volume(s) · ${LGREEN}~$volumes_reclaimable${DGRAY} récupérables)${NC}"
+        if [[ $unused_volumes -gt 0 ]]; then
+            if [[ -n "$volumes_reclaimable" ]] && [[ "$volumes_reclaimable" != "0B" ]] && [[ "$volumes_reclaimable" != "0" ]]; then
+                echo -e "      ${DGRAY}├─${NC} ${LYELLOW}docker volume prune${NC} ${DGRAY}(${LYELLOW}$unused_volumes${DGRAY} volume(s) · ${LGREEN}~$volumes_reclaimable${DGRAY} récupérables)${NC}"
+            else
+                echo -e "      ${DGRAY}├─${NC} ${LYELLOW}docker volume prune${NC} ${DGRAY}(${LYELLOW}$unused_volumes${DGRAY} volume(s) non utilisés)${NC}"
+            fi
         fi
         
         if [[ $stopped_count -gt 0 ]] && [[ -n "$containers_reclaimable" ]]; then
