@@ -295,7 +295,7 @@ Audit de sécurité :
 ```
 
 
-## 🤝 Contribution
+## Contribution
 
 Les contributions sont les bienvenues ! N'hésitez pas à :
 - Signaler des bugs
@@ -303,10 +303,7 @@ Les contributions sont les bienvenues ! N'hésitez pas à :
 - Améliorer la documentation
 
 
-## ⚠️ Avertissement
+## Avertissement
 
 Cet outil est conçu pour l'audit de sécurité légitime. L'utilisation sans autorisation appropriée peut être illégale. L'auteur n'est pas responsable de l'utilisation abusive de cet outil.
 
----
-
-**Made with ❤️ for the security community**
